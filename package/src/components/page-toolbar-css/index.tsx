@@ -2420,23 +2420,10 @@ export function PageFeedbackToolbarCSS({
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     ctx.save();
     ctx.scale(dpr, dpr);
-    for (let si = 0; si < strokes.length; si++) {
-      const stroke = strokes[si];
-      if (stroke.points.length < 2) continue;
-      const isHovered = si === hoveredIdx;
-      const offsetY = stroke.fixed ? 0 : scrollY;
-      ctx.beginPath();
-      ctx.strokeStyle = isHovered ? stroke.color : stroke.color;
-      ctx.lineWidth = isHovered ? 5 : 3;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      if (isHovered) {
-        ctx.shadowColor = stroke.color;
-        ctx.shadowBlur = 6;
-      }
+
+    const tracePath = (stroke: typeof strokes[0], offsetY: number) => {
       const p0 = stroke.points[0];
       ctx.moveTo(p0.x, p0.y - offsetY);
-      // Quadratic curve smoothing through midpoints
       for (let i = 1; i < stroke.points.length - 1; i++) {
         const curr = stroke.points[i];
         const next = stroke.points[i + 1];
@@ -2444,14 +2431,39 @@ export function PageFeedbackToolbarCSS({
         const midY = (curr.y + next.y - 2 * offsetY) / 2;
         ctx.quadraticCurveTo(curr.x, curr.y - offsetY, midX, midY);
       }
-      // Line to last point
       const last = stroke.points[stroke.points.length - 1];
       ctx.lineTo(last.x, last.y - offsetY);
-      ctx.stroke();
-      if (isHovered) {
-        ctx.shadowColor = "transparent";
-        ctx.shadowBlur = 0;
+    };
+
+    // Pass 1: glow behind hovered stroke
+    if (hoveredIdx != null && hoveredIdx < strokes.length) {
+      const stroke = strokes[hoveredIdx];
+      if (stroke.points.length >= 2) {
+        const offsetY = stroke.fixed ? 0 : scrollY;
+        ctx.beginPath();
+        ctx.strokeStyle = stroke.color;
+        ctx.lineWidth = 10;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.globalAlpha = 0.25;
+        tracePath(stroke, offsetY);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
       }
+    }
+
+    // Pass 2: all strokes at normal weight
+    for (let si = 0; si < strokes.length; si++) {
+      const stroke = strokes[si];
+      if (stroke.points.length < 2) continue;
+      const offsetY = stroke.fixed ? 0 : scrollY;
+      ctx.beginPath();
+      ctx.strokeStyle = stroke.color;
+      ctx.lineWidth = 3;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      tracePath(stroke, offsetY);
+      ctx.stroke();
     }
     ctx.restore();
   }, []);
@@ -2469,6 +2481,16 @@ export function PageFeedbackToolbarCSS({
     const dpr = window.devicePixelRatio || 1;
 
     const handleMouseDown = (e: MouseEvent) => {
+      // If an annotation popup is open, shake it instead of drawing
+      if (pendingAnnotation) {
+        popupRef.current?.shake();
+        return;
+      }
+      if (editingAnnotation) {
+        editPopupRef.current?.shake();
+        return;
+      }
+
       // Check if clicking on an existing stroke
       const strokeIdx = findStrokeAtPoint(e.clientX, e.clientY, drawStrokes);
       drawClickStartRef.current = { x: e.clientX, y: e.clientY, strokeIdx };
@@ -2755,7 +2777,7 @@ export function PageFeedbackToolbarCSS({
       canvas.removeEventListener("mouseup", handleMouseUp);
       canvas.removeEventListener("mouseleave", handleMouseLeave);
     };
-  }, [isDrawMode, isActive, settings.annotationColor, drawStrokes, annotations, effectiveReactMode, redrawCanvas, startEditAnnotation]);
+  }, [isDrawMode, isActive, settings.annotationColor, drawStrokes, annotations, effectiveReactMode, redrawCanvas, startEditAnnotation, pendingAnnotation, editingAnnotation]);
 
   // Draw mode: resize canvas, redraw on scroll
   useEffect(() => {
