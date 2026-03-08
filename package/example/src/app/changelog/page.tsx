@@ -30,6 +30,22 @@ function isMajorVersion(version: string): boolean {
 
 const releases: Release[] = [
   {
+    version: "2.3.0",
+    date: "March 7, 2026",
+    changes: [
+      { type: "added", text: <>Source file detection — annotations now include the source file path and line number (e.g. <code>src/components/Button.tsx:42</code>), works with Next.js, Vite, Webpack, and Turbopack</> },
+      { type: "added", text: <><code>className</code> prop for custom toolbar positioning</> },
+      { type: "added", text: "\"Hide Until Restart\" setting to dismiss the toolbar per-tab" },
+      { type: "improved", text: "Toolbar CSS fully isolated from host page styles" },
+      { type: "improved", text: "Instant tooltips when moving between toolbar buttons" },
+      { type: "improved", text: <><code>sideEffects: false</code> for better tree-shaking</> },
+      { type: "fixed", text: "Dev mode detection for non-standard environments" },
+      { type: "fixed", text: "Send button pointer events not registering" },
+      { type: "fixed", text: "Toolbar portal events triggering host app click-outside handlers" },
+      { type: "fixed", text: "Resolved and dismissed annotations reappearing after sync" },
+    ],
+  },
+  {
     version: "2.2.1",
     date: "February 11, 2026",
     changes: [

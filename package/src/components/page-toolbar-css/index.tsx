@@ -60,6 +60,8 @@ import {
   saveSessionId,
   clearSessionId,
   saveAnnotationsWithSyncMarker,
+  loadToolbarHidden,
+  saveToolbarHidden,
 } from "../../utils/storage";
 import {
   createSession,
@@ -70,6 +72,11 @@ import {
   requestAction,
 } from "../../utils/sync";
 import { getReactComponentName } from "../../utils/react-detection";
+import {
+  getSourceLocation,
+  findNearestComponentSource,
+  formatSourceLocation,
+} from "../../utils/source-location";
 import {
   freeze as freezeAll,
   unfreeze as unfreezeAll,
@@ -260,6 +267,10 @@ function formatRelativeTime(dateString: string): string {
   return date.toLocaleDateString();
 }
 
+function isRenderableAnnotation(annotation: Annotation): boolean {
+  return annotation.status !== "resolved" && annotation.status !== "dismissed";
+}
+
 function truncateUrl(url: string): string {
   try {
     const parsed = new URL(url);
@@ -287,6 +298,15 @@ function getActiveButtonStyle(
     color: color,
     backgroundColor: hexToRgba(color, 0.25),
   };
+}
+
+function detectSourceFile(element: Element): string | undefined {
+  const result = getSourceLocation(element as HTMLElement);
+  const loc = result.found ? result : findNearestComponentSource(element as HTMLElement);
+  if (loc.found && loc.source) {
+    return formatSourceLocation(loc.source, "path");
+  }
+  return undefined;
 }
 
 function generateOutput(
@@ -322,7 +342,7 @@ function generateOutput(
 
   annotations.forEach((a, i) => {
     if (detailLevel === "compact") {
-      output += `${i + 1}. **${a.element}**: ${a.comment}`;
+      output += `${i + 1}. **${a.element}**${a.sourceFile ? ` (${a.sourceFile})` : ""}: ${a.comment}`;
       if (a.selectedText) {
         output += ` (re: "${a.selectedText.slice(0, 30)}${a.selectedText.length > 30 ? "..." : ""}")`;
       }
@@ -358,6 +378,9 @@ function generateOutput(
       if (a.nearbyElements) {
         output += `**Nearby Elements:** ${a.nearbyElements}\n`;
       }
+      if (a.sourceFile) {
+        output += `**Source:** ${a.sourceFile}\n`;
+      }
       if (a.reactComponents) {
         output += `**React:** ${a.reactComponents}\n`;
       }
@@ -366,6 +389,10 @@ function generateOutput(
       // Standard and detailed modes
       output += `### ${i + 1}. ${a.element}\n`;
       output += `**Location:** ${a.elementPath}\n`;
+
+      if (a.sourceFile) {
+        output += `**Source:** ${a.sourceFile}\n`;
+      }
 
       // React components in both standard and detailed
       if (a.reactComponents) {
@@ -433,6 +460,8 @@ export type PageFeedbackToolbarCSSProps = {
   onSessionCreated?: (sessionId: string) => void;
   /** Webhook URL to receive annotation events. */
   webhookUrl?: string;
+  /** Custom class name applied to the toolbar container. Use to adjust positioning or z-index. */
+  className?: string;
 };
 
 /** Alias for PageFeedbackToolbarCSSProps */
@@ -457,10 +486,34 @@ export function PageFeedbackToolbarCSS({
   sessionId: initialSessionId,
   onSessionCreated,
   webhookUrl,
+  className: userClassName,
 }: PageFeedbackToolbarCSSProps = {}) {
   const [isActive, setIsActive] = useState(false);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [showMarkers, setShowMarkers] = useState(true);
+  const [isToolbarHidden, setIsToolbarHidden] = useState(() => loadToolbarHidden());
+  const [isToolbarHiding, setIsToolbarHiding] = useState(false);
+
+  // Stop native events from bubbling past document.body when they originate
+  // inside the toolbar portal. Without this, clicks on the toolbar propagate to
+  // document-level listeners, triggering "click outside" handlers that close
+  // modals, dropdowns, and drawers. We attach to body (not a wrapper div) so
+  // React's synthetic event delegation (which also listens on body/root) still
+  // works — we only block propagation from body → document/window.
+  const portalWrapperRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const stop = (e: Event) => {
+      const wrapper = portalWrapperRef.current;
+      if (wrapper && wrapper.contains(e.target as Node)) {
+        e.stopPropagation();
+      }
+    };
+    const events = ["mousedown", "click", "pointerdown"] as const;
+    events.forEach((evt) => document.body.addEventListener(evt, stop));
+    return () => {
+      events.forEach((evt) => document.body.removeEventListener(evt, stop));
+    };
+  }, []);
 
   // Unified marker visibility state - controls both toolbar and eye toggle
   const [markersVisible, setMarkersVisible] = useState(false);
@@ -485,6 +538,7 @@ export function PageFeedbackToolbarCSS({
     computedStylesObj?: Record<string, string>;
     nearbyElements?: string;
     reactComponents?: string;
+    sourceFile?: string;
     elementBoundingBoxes?: Array<{
       x: number;
       y: number;
@@ -529,6 +583,10 @@ export function PageFeedbackToolbarCSS({
   );
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [tooltipsHidden, setTooltipsHidden] = useState(false);
+  const [tooltipSessionActive, setTooltipSessionActive] = useState(false);
+  const tooltipSessionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   // Cmd+shift+click multi-select state
   const [pendingMultiSelectElements, setPendingMultiSelectElements] = useState<
@@ -550,6 +608,31 @@ export function PageFeedbackToolbarCSS({
   const showTooltipsAgain = () => {
     setTooltipsHidden(false);
   };
+
+  const handleControlsMouseEnter = () => {
+    if (!tooltipSessionActive) {
+      tooltipSessionTimerRef.current = setTimeout(
+        () => setTooltipSessionActive(true),
+        850,
+      );
+    }
+  };
+
+  const handleControlsMouseLeave = () => {
+    if (tooltipSessionTimerRef.current) {
+      clearTimeout(tooltipSessionTimerRef.current);
+      tooltipSessionTimerRef.current = null;
+    }
+    setTooltipSessionActive(false);
+    showTooltipsAgain();
+  };
+
+  useEffect(() => {
+    return () => {
+      if (tooltipSessionTimerRef.current)
+        clearTimeout(tooltipSessionTimerRef.current);
+    };
+  }, []);
 
   // Tooltip component that renders via portal to escape overflow clipping
   const Tooltip = ({
@@ -656,17 +739,12 @@ export function PageFeedbackToolbarCSS({
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [showEntranceAnimation, setShowEntranceAnimation] = useState(false);
 
-  // Check if running on localhost - React detection only works locally
-  const isLocalhost =
-    typeof window !== "undefined" &&
-    (window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1" ||
-      window.location.hostname === "0.0.0.0" ||
-      window.location.hostname.endsWith(".local"));
+  // Check if running in development mode - React detection only works in development mode
+  const isDevMode = process.env.NODE_ENV === "development";
 
   // Effective React mode - derived from outputDetail when enabled
   const effectiveReactMode: ReactComponentMode =
-    isLocalhost && settings.reactEnabled
+    isDevMode && settings.reactEnabled
       ? OUTPUT_TO_REACT_MODE[settings.outputDetail]
       : "off";
 
@@ -777,7 +855,7 @@ export function PageFeedbackToolbarCSS({
     setMounted(true);
     setScrollY(window.scrollY);
     const stored = loadAnnotations<Annotation>(pathname);
-    setAnnotations(stored);
+    setAnnotations(stored.filter(isRenderableAnnotation));
 
     // Trigger entrance animation only on first load (not on SPA navigation)
     if (!hasPlayedEntranceAnimation) {
@@ -924,17 +1002,19 @@ export function PageFeedbackToolbarCSS({
                 ...session.annotations,
                 ...syncedAnnotations,
               ];
-              setAnnotations(allAnnotations);
+              setAnnotations(allAnnotations.filter(isRenderableAnnotation));
               saveAnnotationsWithSyncMarker(
                 pathname,
-                allAnnotations,
+                allAnnotations.filter(isRenderableAnnotation),
                 session.id,
               );
             } else {
-              setAnnotations(session.annotations);
+              setAnnotations(
+                session.annotations.filter(isRenderableAnnotation),
+              );
               saveAnnotationsWithSyncMarker(
                 pathname,
-                session.annotations,
+                session.annotations.filter(isRenderableAnnotation),
                 session.id,
               );
             }
@@ -1008,10 +1088,14 @@ export function PageFeedbackToolbarCSS({
                     return unsyncedAnnotations[i];
                   });
 
+                  const renderableSyncedAnnotations = syncedAnnotations.filter(
+                    isRenderableAnnotation,
+                  );
+
                   // Save with sync marker
                   saveAnnotationsWithSyncMarker(
                     pagePath,
-                    syncedAnnotations,
+                    renderableSyncedAnnotations,
                     targetSession.id,
                   );
 
@@ -1023,7 +1107,7 @@ export function PageFeedbackToolbarCSS({
                       const newDuringSync = prev.filter(
                         (a) => !originalIds.has(a.id),
                       );
-                      return [...syncedAnnotations, ...newDuringSync];
+                      return [...renderableSyncedAnnotations, ...newDuringSync];
                     });
                   }
                 } catch (err) {
@@ -1180,8 +1264,15 @@ export function PageFeedbackToolbarCSS({
 
             // Update local state with server + synced annotations
             const allAnnotations = [...serverAnnotations, ...syncedAnnotations];
-            setAnnotations(allAnnotations);
-            saveAnnotationsWithSyncMarker(pathname, allAnnotations, sessionId!);
+            const renderableAnnotations = allAnnotations.filter(
+              isRenderableAnnotation,
+            );
+            setAnnotations(renderableAnnotations);
+            saveAnnotationsWithSyncMarker(
+              pathname,
+              renderableAnnotations,
+              sessionId!,
+            );
           }
         } catch (err) {
           console.warn("[Agentation] Failed to sync on reconnect:", err);
@@ -1191,6 +1282,18 @@ export function PageFeedbackToolbarCSS({
       syncLocalAnnotations();
     }
   }, [connectionStatus, endpoint, mounted, currentSessionId, pathname]);
+
+  const hideToolbarTemporarily = useCallback(() => {
+    if (isToolbarHiding) return;
+    setIsToolbarHiding(true);
+    setShowSettings(false);
+    setIsActive(false);
+    originalSetTimeout(() => {
+      saveToolbarHidden(true);
+      setIsToolbarHidden(true);
+      setIsToolbarHiding(false);
+    }, 400);
+  }, [isToolbarHiding]);
 
   // Demo annotations
   useEffect(() => {
@@ -1345,6 +1448,7 @@ export function PageFeedbackToolbarCSS({
         cssClasses: getElementClasses(firstEl),
         nearbyText: getNearbyText(firstEl),
         reactComponents: firstItem.reactComponents,
+        sourceFile: detectSourceFile(firstEl),
       });
     } else {
       // Multiple elements - multi-select annotation
@@ -1403,6 +1507,7 @@ export function PageFeedbackToolbarCSS({
         nearbyElements: getNearbyElements(firstEl),
         cssClasses: getElementClasses(firstEl),
         nearbyText: getNearbyText(firstEl),
+        sourceFile: detectSourceFile(firstEl),
       });
     }
 
@@ -1660,6 +1765,7 @@ export function PageFeedbackToolbarCSS({
         computedStylesObj,
         nearbyElements: getNearbyElements(elementUnder),
         reactComponents: reactComponents ?? undefined,
+        sourceFile: detectSourceFile(elementUnder),
         targetElement: elementUnder, // Store for live position queries
       });
       setHoverInfo(null);
@@ -2109,6 +2215,7 @@ export function PageFeedbackToolbarCSS({
             nearbyElements: getNearbyElements(firstElement),
             cssClasses: getElementClasses(firstElement),
             nearbyText: getNearbyText(firstElement),
+            sourceFile: detectSourceFile(firstElement),
           });
         } else {
           // No elements selected, but allow annotation on empty area
@@ -2208,6 +2315,7 @@ export function PageFeedbackToolbarCSS({
         computedStyles: pendingAnnotation.computedStyles,
         nearbyElements: pendingAnnotation.nearbyElements,
         reactComponents: pendingAnnotation.reactComponents,
+        sourceFile: pendingAnnotation.sourceFile,
         elementBoundingBoxes: pendingAnnotation.elementBoundingBoxes,
         // Protocol fields for server sync
         ...(endpoint && currentSessionId
@@ -2894,12 +3002,13 @@ export function PageFeedbackToolbarCSS({
   ]);
 
   if (!mounted) return null;
+  if (isToolbarHidden) return null;
 
   const hasAnnotations = annotations.length > 0;
 
   // Filter annotations for rendering (exclude exiting ones from normal flow)
   const visibleAnnotations = annotations.filter(
-    (a) => !exitingMarkers.has(a.id),
+    (a) => !exitingMarkers.has(a.id) && isRenderableAnnotation(a),
   );
   const exitingAnnotationsList = annotations.filter((a) =>
     exitingMarkers.has(a.id),
@@ -2952,10 +3061,10 @@ export function PageFeedbackToolbarCSS({
   };
 
   return createPortal(
-    <>
+    <div ref={portalWrapperRef} style={{ display: "contents" }}>
       {/* Toolbar */}
       <div
-        className={styles.toolbar}
+        className={`${styles.toolbar}${userClassName ? ` ${userClassName}` : ""}`}
         data-feedback-toolbar
         style={
           toolbarPosition
@@ -2970,7 +3079,7 @@ export function PageFeedbackToolbarCSS({
       >
         {/* Morphing container */}
         <div
-          className={`${styles.toolbarContainer} ${!isDarkMode ? styles.light : ""} ${isActive ? styles.expanded : styles.collapsed} ${showEntranceAnimation ? styles.entrance : ""} ${isDraggingToolbar ? styles.dragging : ""} ${!settings.webhooksEnabled && (isValidUrl(settings.webhookUrl) || isValidUrl(webhookUrl || "")) ? styles.serverConnected : ""}`}
+          className={`${styles.toolbarContainer} ${!isDarkMode ? styles.light : ""} ${isActive ? styles.expanded : styles.collapsed} ${showEntranceAnimation ? styles.entrance : ""} ${isToolbarHiding ? styles.hiding : ""} ${isDraggingToolbar ? styles.dragging : ""} ${!settings.webhooksEnabled && (isValidUrl(settings.webhookUrl) || isValidUrl(webhookUrl || "")) ? styles.serverConnected : ""}`}
           onClick={
             !isActive
               ? (e) => {
@@ -3016,8 +3125,9 @@ export function PageFeedbackToolbarCSS({
               toolbarPosition && toolbarPosition.y < 100
                 ? styles.tooltipBelow
                 : ""
-            } ${tooltipsHidden || showSettings ? styles.tooltipsHidden : ""}`}
-            onMouseLeave={showTooltipsAgain}
+            } ${tooltipsHidden || showSettings ? styles.tooltipsHidden : ""} ${tooltipSessionActive ? styles.tooltipsInSession : ""}`}
+            onMouseEnter={handleControlsMouseEnter}
+            onMouseLeave={handleControlsMouseLeave}
           >
             <div
               className={`${styles.buttonWrapper} ${
@@ -3082,7 +3192,7 @@ export function PageFeedbackToolbarCSS({
 
             {/* Send button - only visible when webhook URL is available AND auto-send is off */}
             <div
-              className={`${styles.buttonWrapper} ${styles.sendButtonWrapper} ${!settings.webhooksEnabled && (isValidUrl(settings.webhookUrl) || isValidUrl(webhookUrl || "")) ? styles.sendButtonVisible : ""}`}
+              className={`${styles.buttonWrapper} ${styles.sendButtonWrapper} ${isActive && !settings.webhooksEnabled && (isValidUrl(settings.webhookUrl) || isValidUrl(webhookUrl || "")) ? styles.sendButtonVisible : ""}`}
             >
               <button
                 className={`${styles.controlButton} ${!isDarkMode ? styles.light : ""} ${sendState === "sent" || sendState === "failed" ? styles.statusShowing : ""}`}
@@ -3299,7 +3409,7 @@ export function PageFeedbackToolbarCSS({
                   </div>
 
                   <div
-                    className={`${styles.settingsRow} ${styles.settingsRowMarginTop} ${!isLocalhost ? styles.settingsRowDisabled : ""}`}
+                    className={`${styles.settingsRow} ${styles.settingsRowMarginTop} ${!isDevMode ? styles.settingsRowDisabled : ""}`}
                   >
                     <div
                       className={`${styles.settingsLabel} ${!isDarkMode ? styles.light : ""}`}
@@ -3307,8 +3417,8 @@ export function PageFeedbackToolbarCSS({
                       React Components
                       <Tooltip
                         content={
-                          !isLocalhost
-                            ? "Disabled — production builds minify component names, making detection unreliable. Use on localhost in development mode."
+                          !isDevMode
+                            ? "Disabled — production builds minify component names, making detection unreliable. Use in development mode."
                             : "Include React component names in annotations"
                         }
                       >
@@ -3318,18 +3428,43 @@ export function PageFeedbackToolbarCSS({
                       </Tooltip>
                     </div>
                     <label
-                      className={`${styles.toggleSwitch} ${!isLocalhost ? styles.disabled : ""}`}
+                      className={`${styles.toggleSwitch} ${!isDevMode ? styles.disabled : ""}`}
                     >
                       <input
                         type="checkbox"
-                        checked={isLocalhost && settings.reactEnabled}
-                        disabled={!isLocalhost}
+                        checked={isDevMode && settings.reactEnabled}
+                        disabled={!isDevMode}
                         onChange={() =>
                           setSettings((s) => ({
                             ...s,
                             reactEnabled: !s.reactEnabled,
                           }))
                         }
+                      />
+                      <span className={styles.toggleSlider} />
+                    </label>
+                  </div>
+
+                  <div className={`${styles.settingsRow} ${styles.settingsRowMarginTop}`}>
+                    <div
+                      className={`${styles.settingsLabel} ${!isDarkMode ? styles.light : ""}`}
+                    >
+                      Hide Until Restart
+                      <Tooltip content="Hides the toolbar until you open a new tab">
+                        <span className={styles.helpIcon}>
+                          <IconHelp size={20} />
+                        </span>
+                      </Tooltip>
+                    </div>
+                    <label className={styles.toggleSwitch}>
+                      <input
+                        type="checkbox"
+                        checked={false}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            hideToolbarTemporarily();
+                          }
+                        }}
                       />
                       <span className={styles.toggleSlider} />
                     </label>
@@ -4279,7 +4414,7 @@ export function PageFeedbackToolbarCSS({
           )}
         </div>
       )}
-    </>,
+    </div>,
     document.body,
   );
 }

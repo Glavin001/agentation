@@ -260,7 +260,8 @@ export default function AgentationDocs() {
           </p>
           <ul>
             <li><strong>CSS selectors</strong> to grep your codebase</li>
-            <li><strong>React component names</strong> to find the right file</li>
+            <li><strong>Source file paths</strong> to jump directly to the right line</li>
+            <li><strong>React component tree</strong> to understand the hierarchy</li>
             <li><strong>Computed styles</strong> to understand current appearance</li>
             <li><strong>Your feedback</strong> with intent and priority</li>
           </ul>

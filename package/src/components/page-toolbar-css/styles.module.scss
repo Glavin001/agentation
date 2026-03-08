@@ -7,6 +7,28 @@ svg[fill="none"] {
   fill: none !important;
 }
 
+// Protect toolbar elements from host page global CSS.
+// The toolbar is portaled to document.body, so global rules like
+// `button { background: black }` leak in. :where() zeroes specificity
+// so our component class styles (0,1,0) always win by source order.
+// Only reset cosmetic properties that global CSS commonly overrides —
+// avoid `all: unset` which also nukes layout props (box-sizing,
+// appearance, line-height) that component styles don't re-set.
+.toolbar :where(button, input, select, textarea, label) {
+  background: unset;
+  border: unset;
+  border-radius: unset;
+  padding: unset;
+  margin: unset;
+  color: unset;
+  font: unset;
+  letter-spacing: unset;
+  text-transform: unset;
+  text-decoration: unset;
+  box-shadow: unset;
+  outline: unset;
+}
+
 $blue: #3c82f7;
 $red: #ff3b30;
 $green: #34c759;
@@ -23,6 +45,17 @@ $green: #34c759;
   to {
     opacity: 1;
     transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes toolbarHide {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.8);
   }
 }
 
@@ -281,6 +314,11 @@ $green: #34c759;
 
   &.entrance {
     animation: toolbarEnter 0.5s cubic-bezier(0.34, 1.2, 0.64, 1) forwards;
+  }
+
+  &.hiding {
+    animation: toolbarHide 0.4s cubic-bezier(0.4, 0, 1, 1) forwards;
+    pointer-events: none;
   }
 
   &.collapsed {
@@ -618,6 +656,10 @@ $green: #34c759;
     opacity: 0;
     visibility: hidden;
   }
+}
+
+.tooltipsInSession .buttonWrapper:hover .buttonTooltip {
+  transition-delay: 0s;
 }
 
 // Send button wrapper - animates width when MCP connects/disconnects
@@ -1389,6 +1431,8 @@ $green: #34c759;
   }
 
   &:hover {
+    border-bottom-color: rgba(255, 255, 255, 0.07);
+
     svg {
       opacity: 1;
     }
@@ -1397,6 +1441,10 @@ $green: #34c759;
   &.light {
     color: rgba(0, 0, 0, 0.85);
     border-bottom-color: rgba(0, 0, 0, 0.08);
+
+    &:hover {
+      border-bottom-color: rgba(0, 0, 0, 0.08);
+    }
   }
 }
 
