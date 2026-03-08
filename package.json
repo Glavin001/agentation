@@ -8,6 +8,9 @@
     "example": "pnpm --filter feedback-tool-example dev",
     "pack": "cd package && pnpm pack",
     "mcp": "pnpm --filter agentation-mcp start",
+    "proxy": "pnpm --filter agentation-mcp start:proxy",
+    "dev:proxy": "pnpm --filter feedback-tool-example dev & pnpm proxy",
+    "demo": "pnpm --filter agentation-proxy example:proxy",
     "publish:agentation": "pnpm --filter agentation publish --access public",
     "publish:mcp": "pnpm --filter agentation-mcp publish --access public",
     "publish:all": "pnpm publish:agentation && pnpm publish:mcp"

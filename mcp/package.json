@@ -30,12 +30,16 @@
     "watch": "tsup --watch",
     "dev": "pnpm build && pnpm watch",
     "start": "pnpm build && node dist/cli.js server",
+    "start:proxy": "pnpm build && node dist/cli.js server --proxy http://localhost:3001",
     "prepublishOnly": "pnpm build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "better-sqlite3": "^12.6.2",
     "zod": "^3.23.0"
+  },
+  "optionalDependencies": {
+    "agentation-proxy": "workspace:*"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

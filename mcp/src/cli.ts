@@ -241,6 +241,8 @@ if (command === "init") {
     let mcpOnly = false;
     let httpUrl = "http://localhost:4747";
     let apiKeyArg: string | undefined;
+    let proxyTarget: string | undefined;
+    let proxyPort: number | undefined;
 
     for (let i = 0; i < args.length; i++) {
       if (args[i] === "--port" && args[i + 1]) {
@@ -264,6 +266,17 @@ if (command === "init") {
         apiKeyArg = args[i + 1];
         i++;
       }
+      if (args[i] === "--proxy" && args[i + 1]) {
+        proxyTarget = args[i + 1];
+        i++;
+      }
+      if (args[i] === "--proxy-port" && args[i + 1]) {
+        const parsed = parseInt(args[i + 1], 10);
+        if (!isNaN(parsed) && parsed > 0 && parsed < 65536) {
+          proxyPort = parsed;
+        }
+        i++;
+      }
     }
 
     // API key from flag or environment variable
@@ -279,6 +292,18 @@ if (command === "init") {
       console.error("MCP server error:", err);
       process.exit(1);
     });
+
+    if (proxyTarget) {
+      import("agentation-proxy").then(({ startProxy }) => {
+        startProxy({
+          target: proxyTarget!,
+          port: proxyPort,
+          mcpEndpoint: httpUrl,
+        });
+      }).catch(() => {
+        console.error("Failed to start proxy. Install agentation-proxy: pnpm add agentation-proxy");
+      });
+    }
   });
 } else if (command === "help" || command === "--help" || command === "-h" || !command) {
   console.log(`
@@ -291,10 +316,12 @@ Usage:
   agentation-mcp help                    Show this help message
 
 Server Options:
-  --port <port>      HTTP server port (default: 4747)
-  --mcp-only         Skip HTTP server, only run MCP on stdio
-  --http-url <url>   HTTP server URL for MCP to fetch from
-  --api-key <key>    API key for cloud storage (or set AGENTATION_API_KEY env var)
+  --port <port>        HTTP server port (default: 4747)
+  --mcp-only           Skip HTTP server, only run MCP on stdio
+  --http-url <url>     HTTP server URL for MCP to fetch from
+  --api-key <key>      API key for cloud storage (or set AGENTATION_API_KEY env var)
+  --proxy <url>        Start reverse proxy that injects Agentation into the target app
+  --proxy-port <port>  Proxy listen port (default: 4748)
 
 Commands:
   init      Guided setup that configures Claude Code to use the MCP server.
@@ -320,6 +347,9 @@ Examples:
 
   # Or using environment variable
   AGENTATION_API_KEY=ag_xxx agentation-mcp server
+
+  # Proxy mode: inject Agentation into any app
+  agentation-mcp server --proxy http://localhost:3000
 `);
 } else {
   console.error(`Unknown command: ${command}`);

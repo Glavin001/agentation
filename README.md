@@ -9,9 +9,13 @@
 
 ```bash
 npm install agentation -D
+# proxy + MCP server (optional)
+npm install agentation-proxy agentation-mcp -D
 ```
 
 ## Usage
+
+### Option 1 — React component (recommended for React apps)
 
 ```tsx
 import { Agentation } from 'agentation';
@@ -26,6 +30,25 @@ function App() {
 }
 ```
 
+### Option 2 — Reverse proxy (any app, no source changes)
+
+Inject Agentation into **any** web app — React, Vue, Svelte, plain HTML — without touching its source code:
+
+```bash
+# Start your app as usual, then wrap it with the proxy
+npx agentation-proxy --target http://localhost:3000
+```
+
+Open `http://localhost:4748` instead of your app's URL. The toolbar appears on every page automatically.
+
+Or start both the MCP server and proxy together:
+
+```bash
+agentation-mcp server --proxy http://localhost:3000
+```
+
+See [proxy/README.md](./proxy/README.md) for full proxy documentation.
+
 The toolbar appears in the bottom-right corner. Click to activate, then click any element to annotate it.
 
 ## Features
@@ -38,6 +61,7 @@ The toolbar appears in the bottom-right corner. Click to activate, then click an
 - **Structured output** – Copy markdown with selectors, positions, and context
 - **Dark/light mode** – Matches your preference or set manually
 - **Zero dependencies** – Pure CSS animations, no runtime libraries
+- **Framework-agnostic injection** – Works on any page via the reverse proxy
 
 ## How it works
 
@@ -45,7 +69,8 @@ Agentation captures class names, selectors, and element positions so AI agents c
 
 ## Requirements
 
-- React 18+
+- React 18+ (for the React component)
+- Node.js 18+ (for the proxy and MCP server)
 - Desktop browser (mobile not supported)
 
 ## Docs

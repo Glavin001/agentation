@@ -54,14 +54,19 @@ agentation-mcp init                    # Setup wizard (registers via claude mcp 
 agentation-mcp server [options]        # Start the annotation server
 agentation-mcp doctor                  # Check your setup
 agentation-mcp help                    # Show help
+
+# With proxy (injects Agentation into any app automatically)
+agentation-mcp server --proxy http://localhost:3000
 ```
 
 ### Server Options
 
 ```bash
---port <port>      # HTTP server port (default: 4747)
---mcp-only         # Skip HTTP server, only run MCP on stdio
---http-url <url>   # HTTP server URL for MCP to fetch from
+--port <port>         # HTTP server port (default: 4747)
+--mcp-only            # Skip HTTP server, only run MCP on stdio
+--http-url <url>      # HTTP server URL for MCP to fetch from
+--proxy <url>         # Start reverse proxy, injecting Agentation into target app
+--proxy-port <port>   # Proxy listen port (default: 4748)
 ```
 
 ## MCP Tools
@@ -145,6 +150,30 @@ export AGENTATION_WEBHOOKS=https://server1.com/hook,https://server2.com/hook
 | `AGENTATION_WEBHOOK_URL` | Single webhook URL | - |
 | `AGENTATION_WEBHOOKS` | Comma-separated webhook URLs | - |
 | `AGENTATION_EVENT_RETENTION_DAYS` | Days to keep events | `7` |
+
+## Proxy Mode
+
+Inject Agentation into **any** web app without modifying its source code. The proxy intercepts HTML responses and injects the toolbar automatically. WebSocket connections (HMR/live-reload) are proxied transparently.
+
+```bash
+# Start MCP server + reverse proxy together
+agentation-mcp server --proxy http://localhost:3000
+
+# Custom proxy port
+agentation-mcp server --proxy http://localhost:5173 --proxy-port 8080
+```
+
+Then open `http://localhost:4748` (or your custom proxy port) instead of your app's URL.
+
+This requires `agentation-proxy` to be installed:
+
+```bash
+npm install agentation-proxy
+# or
+pnpm add agentation-proxy
+```
+
+See [agentation-proxy](https://www.npmjs.com/package/agentation-proxy) for standalone proxy usage.
 
 ## Programmatic Usage
 
