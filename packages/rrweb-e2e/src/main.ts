@@ -67,6 +67,13 @@ function renderRecordPage() {
       <div id="dynamic-area" style="margin-top: 16px; min-height: 40px; border: 1px dashed #ccc; padding: 8px;">
         <span id="dynamic-text">Click a button to change this text.</span>
       </div>
+
+      <script id="inline-script">console.log("inline script")</script>
+      <style id="inline-style">.hidden { display: none; }</style>
+
+      <div id="subtree-host" style="margin-top: 16px; border: 1px solid #999; padding: 8px;">
+        <p>Subtree host — new nested elements will be added here.</p>
+      </div>
     </div>
   `;
 
@@ -96,6 +103,48 @@ function renderRecordPage() {
     if (list) list.remove();
   });
 }
+
+// ---- Test helpers (called from Playwright) ----
+(window as any).__addSubtree = function addSubtree() {
+  const host = document.getElementById("subtree-host")!;
+  const wrapper = document.createElement("div");
+  wrapper.id = "nested-wrapper";
+  wrapper.className = "nested-level-0";
+  wrapper.setAttribute("role", "region");
+  wrapper.setAttribute("aria-label", "Nested content");
+  wrapper.innerHTML = `
+    <section id="nested-section" class="nested-level-1">
+      <h3 id="nested-heading" class="nested-level-2">Nested Heading</h3>
+      <p id="nested-para" class="nested-level-2">Nested paragraph</p>
+      <ul id="nested-list" class="nested-level-2" role="list" aria-label="Nested items">
+        <li class="nested-item">Nested Item 1</li>
+        <li class="nested-item">Nested Item 2</li>
+      </ul>
+    </section>
+  `;
+  host.appendChild(wrapper);
+};
+
+(window as any).__removeSubtree = function removeSubtree() {
+  const wrapper = document.getElementById("nested-wrapper");
+  if (wrapper) wrapper.remove();
+};
+
+(window as any).__rapidMutations = function rapidMutations() {
+  const area = document.getElementById("dynamic-area")!;
+  // Fire 10 mutations in rapid succession (same microtask)
+  for (let i = 0; i < 10; i++) {
+    const el = document.createElement("span");
+    el.className = "rapid-item";
+    el.id = `rapid-${i}`;
+    el.textContent = `Rapid #${i}`;
+    area.appendChild(el);
+  }
+};
+
+(window as any).__clearEvents = function clearEvents() {
+  events.length = 0;
+};
 
 // ---- Recording ----
 window.__startRecording = function startRecording() {
