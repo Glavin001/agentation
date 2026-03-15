@@ -148,8 +148,12 @@ function createAnnotation(
 }
 
 /**
- * Translate a mouse event's page coordinates to the iframe's content
+ * Translate a mouse event's page coordinates to the iframe's internal
  * coordinate space, then use elementFromPoint to find the target element.
+ *
+ * The iframe may be visually scaled by rrweb-player's CSS transform.
+ * We compute the scale factor (visual size / internal size) and divide
+ * the visual-space offset by it to get internal coordinates.
  */
 function elementFromOverlayEvent(
   e: React.MouseEvent,
@@ -158,14 +162,29 @@ function elementFromOverlayEvent(
   if (!iframe?.contentDocument) return null;
 
   const iframeRect = iframe.getBoundingClientRect();
-  const x = e.clientX - iframeRect.left;
-  const y = e.clientY - iframeRect.top;
 
-  if (x < 0 || y < 0 || x > iframeRect.width || y > iframeRect.height) {
+  // Visual-space offset from the iframe's top-left
+  const visualX = e.clientX - iframeRect.left;
+  const visualY = e.clientY - iframeRect.top;
+
+  if (visualX < 0 || visualY < 0 || visualX > iframeRect.width || visualY > iframeRect.height) {
     return null;
   }
 
-  return iframe.contentDocument.elementFromPoint(x, y);
+  // Convert from visual (scaled) space to iframe-internal (unscaled) space.
+  // iframe.clientWidth/Height is the CSS layout size (unscaled).
+  // iframeRect.width/height is the visual size after parent CSS transforms.
+  const internalWidth = iframe.clientWidth;
+  const internalHeight = iframe.clientHeight;
+  if (internalWidth === 0 || internalHeight === 0) return null;
+
+  const scaleX = iframeRect.width / internalWidth;
+  const scaleY = iframeRect.height / internalHeight;
+
+  const internalX = visualX / scaleX;
+  const internalY = visualY / scaleY;
+
+  return iframe.contentDocument.elementFromPoint(internalX, internalY);
 }
 
 /**
