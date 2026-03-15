@@ -47,6 +47,7 @@ function renderRecordPage() {
         <button id="btn-home" class="nav-btn" aria-label="Home">Home</button>
         <button id="btn-about" class="nav-btn" aria-label="About">About</button>
         <button id="btn-contact" class="nav-btn" aria-label="Contact">Contact</button>
+        <button id="btn-remove" class="nav-btn" aria-label="Remove items">Remove Items</button>
       </nav>
 
       <form id="feedback-form" style="margin: 16px 0;">
@@ -89,6 +90,10 @@ function renderRecordPage() {
   document.getElementById("submit-btn")!.addEventListener("click", () => {
     const name = (document.getElementById("name-input") as HTMLInputElement).value;
     document.getElementById("dynamic-text")!.textContent = `Submitted: ${name}`;
+  });
+  document.getElementById("btn-remove")!.addEventListener("click", () => {
+    const list = document.getElementById("item-list");
+    if (list) list.remove();
   });
 }
 
