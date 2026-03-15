@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>rrweb + agentation — Interactive Demo</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: #f5f5f5; color: #1a1a1a; }
+
+    /* ---- Controls bar ---- */
+    #controls {
+      position: sticky; top: 0; z-index: 50;
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 20px;
+      background: #1a1a1a; color: #fff;
+      box-shadow: 0 2px 8px rgba(0,0,0,.25);
+    }
+    #controls h1 { font-size: 16px; margin: 0; font-weight: 600; }
+    #controls .spacer { flex: 1; }
+    #controls button {
+      padding: 8px 16px; border: none; border-radius: 6px;
+      font-size: 14px; font-weight: 500; cursor: pointer;
+      transition: opacity .15s;
+    }
+    #controls button:disabled { opacity: .4; cursor: not-allowed; }
+    #btn-record { background: #ef4444; color: #fff; }
+    #btn-record.recording { animation: pulse 1s infinite; }
+    #btn-stop { background: #6b7280; color: #fff; }
+    #btn-replay { background: #3b82f6; color: #fff; }
+    #status { font-size: 13px; color: #a3a3a3; }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,.5); }
+      50% { box-shadow: 0 0 0 8px rgba(239,68,68,0); }
+    }
+
+    /* ---- Sample app ---- */
+    #sample-app {
+      max-width: 800px; margin: 24px auto; padding: 24px;
+      background: #fff; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    }
+    #sample-app h2 { margin-top: 0; }
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin: 16px 0; }
+    .card {
+      padding: 16px; border-radius: 8px; border: 1px solid #e5e7eb;
+      transition: transform .15s, box-shadow .15s; cursor: pointer;
+    }
+    .card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.1); }
+    .card h3 { margin: 0 0 8px; font-size: 15px; }
+    .card p { margin: 0; font-size: 13px; color: #6b7280; }
+    .card-blue { border-color: #93c5fd; background: #eff6ff; }
+    .card-green { border-color: #86efac; background: #f0fdf4; }
+    .card-purple { border-color: #c4b5fd; background: #f5f3ff; }
+    .card-orange { border-color: #fdba74; background: #fff7ed; }
+
+    .toolbar { display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap; }
+    .toolbar button {
+      padding: 8px 14px; border: 1px solid #d1d5db; border-radius: 6px;
+      background: #fff; font-size: 13px; cursor: pointer; transition: background .15s;
+    }
+    .toolbar button:hover { background: #f3f4f6; }
+
+    #todo-list { list-style: none; padding: 0; }
+    #todo-list li {
+      padding: 10px 12px; border-bottom: 1px solid #f3f4f6;
+      display: flex; align-items: center; gap: 10px; font-size: 14px;
+    }
+    #todo-list li.done { text-decoration: line-through; color: #9ca3af; }
+    #todo-list input[type="checkbox"] { width: 16px; height: 16px; }
+
+    #message-area {
+      margin-top: 16px; padding: 12px; min-height: 48px;
+      background: #fafafa; border-radius: 8px; border: 1px dashed #d1d5db;
+      font-size: 14px; color: #6b7280;
+    }
+
+    /* ---- Replay container ---- */
+    #replay-section {
+      display: none;
+      max-width: 1100px; margin: 24px auto; padding: 24px;
+      background: #fff; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    }
+    #replay-section h2 { margin-top: 0; }
+    #player-container { border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
+
+    /* ---- Annotations panel ---- */
+    #annotations-section {
+      display: none;
+      max-width: 1100px; margin: 0 auto 16px; padding: 20px;
+      background: #fff; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    }
+    #annotations-section h3 { margin: 0 0 12px; font-size: 16px; }
+    #no-annotations { color: #9ca3af; font-size: 13px; font-style: italic; }
+    .annotation-card {
+      padding: 12px 16px; margin-bottom: 8px;
+      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+      font-size: 13px;
+    }
+    .annotation-card .ann-header {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+    }
+    .annotation-card .ann-element {
+      font-weight: 600; color: #1e40af; font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+    .annotation-card .ann-id { color: #9ca3af; font-size: 11px; }
+    .annotation-card .ann-detail { color: #475569; line-height: 1.5; }
+    .annotation-card .ann-label { color: #64748b; font-weight: 500; min-width: 100px; display: inline-block; }
+    .annotation-card .ann-value { font-family: 'SF Mono', 'Fira Code', monospace; color: #334155; }
+    .annotation-card .ann-source { color: #7c3aed; }
+    .annotation-card .ann-a11y { color: #059669; }
+
+    /* ---- Source info panel ---- */
+    #source-panel {
+      display: none;
+      max-width: 1100px; margin: 0 auto 24px; padding: 16px;
+      background: #1e293b; color: #e2e8f0; border-radius: 12px;
+      font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px;
+    }
+    #source-panel h3 { margin: 0 0 12px; font-size: 14px; color: #94a3b8; }
+    #source-entries { max-height: 300px; overflow-y: auto; }
+    .source-entry { padding: 6px 0; border-bottom: 1px solid #334155; }
+    .source-entry .node-id { color: #60a5fa; }
+    .source-entry .tag { color: #f472b6; }
+    .source-entry .selector { color: #a78bfa; }
+    .source-entry .a11y { color: #34d399; }
+  </style>
+</head>
+<body>
+  <!-- Controls -->
+  <div id="controls">
+    <h1>rrweb + agentation demo</h1>
+    <div class="spacer"></div>
+    <span id="status">Ready</span>
+    <button id="btn-record">Record</button>
+    <button id="btn-stop" disabled>Stop</button>
+    <button id="btn-replay" disabled>Replay</button>
+  </div>
+
+  <!-- Sample interactive app to record -->
+  <div id="sample-app">
+    <h2>Sample App</h2>
+    <p>Interact with this page while recording. Then stop and hit replay to watch it back with source metadata.</p>
+
+    <div class="card-grid">
+      <div class="card card-blue" id="card-analytics" role="article" aria-label="Analytics card">
+        <h3>Analytics</h3>
+        <p>View your dashboard metrics and KPIs in real time.</p>
+      </div>
+      <div class="card card-green" id="card-reports" role="article" aria-label="Reports card">
+        <h3>Reports</h3>
+        <p>Generate and export detailed reports.</p>
+      </div>
+      <div class="card card-purple" id="card-settings" role="article" aria-label="Settings card">
+        <h3>Settings</h3>
+        <p>Configure your workspace preferences.</p>
+      </div>
+      <div class="card card-orange" id="card-integrations" role="article" aria-label="Integrations card">
+        <h3>Integrations</h3>
+        <p>Connect with third-party services and APIs.</p>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <button id="btn-add-todo" aria-label="Add todo">+ Add Todo</button>
+      <button id="btn-toggle-theme" aria-label="Toggle theme">Toggle Theme</button>
+      <button id="btn-show-alert" aria-label="Show notification">Show Notification</button>
+      <button id="btn-add-card" aria-label="Add new card">+ Add Card</button>
+    </div>
+
+    <h3>Todo List</h3>
+    <ul id="todo-list" role="list" aria-label="Todo items">
+      <li><input type="checkbox" aria-label="Toggle: Review PR" /><span>Review pull request #42</span></li>
+      <li><input type="checkbox" aria-label="Toggle: Write tests" /><span>Write unit tests for auth module</span></li>
+      <li><input type="checkbox" aria-label="Toggle: Deploy staging" /><span>Deploy to staging environment</span></li>
+    </ul>
+
+    <div id="message-area">Click cards, toggle todos, or add items to generate recorded activity.</div>
+  </div>
+
+  <!-- Replay area (hidden until replay) — React mounts here -->
+  <div id="replay-section">
+    <h2>Replay <span style="font-size:14px;color:#6b7280;font-weight:400">— pause playback, then click "Annotate" to inspect elements</span></h2>
+    <div id="replay-root"></div>
+  </div>
+
+  <!-- Annotations log (hidden until replay) -->
+  <div id="annotations-section">
+    <h3>Annotations <span id="annotation-count" style="color:#94a3b8">(0)</span></h3>
+    <div id="annotations-list"></div>
+    <div id="no-annotations">Pause the replay, click "Annotate", then click any element to create an annotation with source info.</div>
+  </div>
+
+  <!-- Source info panel (hidden until replay) -->
+  <div id="source-panel">
+    <h3>Source Map Store — <span id="source-count">0</span> elements captured</h3>
+    <div id="source-entries"></div>
+  </div>
+
+  <script type="module" src="/src/demo.tsx"></script>
+</body>
+</html>
