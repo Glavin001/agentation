@@ -90,7 +90,6 @@ export function createSourceRecordPlugin(
   name: string;
   observer: (
     cb: (payload: SourceMapPayload) => void,
-    opts: SourceRecordPluginOptions,
   ) => () => void;
   options: SourceRecordPluginOptions;
 } {

@@ -13,7 +13,7 @@ export interface SourceMapStore {
 
   /**
    * Look up source metadata by DOM element in the replay iframe.
-   * Reads the element's `data-rrid` attribute to find the rrweb node ID.
+   * Uses rrweb's internal `__sn` property to find the node ID.
    */
   getByElement(el: Element): SourceNodeInfo | null;
 
@@ -50,11 +50,17 @@ export function createSourceMapStore(): SourceMapStore {
     },
 
     getByElement(el: Element): SourceNodeInfo | null {
-      // rrweb replay adds data-rrid attributes to reconstructed elements
-      const rrid = el.getAttribute?.("data-rrid");
-      if (!rrid) return null;
-      const nodeId = Number(rrid);
-      if (isNaN(nodeId)) return null;
+      // rrweb attaches __sn to serialized/reconstructed DOM nodes.
+      // On record side: __sn is { id: number, ... }
+      // On replay side: __sn is also { id: number, ... } (reconstructed mirror)
+      const sn = (el as any).__sn;
+      let nodeId: number | undefined;
+      if (sn && typeof sn === "object" && typeof sn.id === "number") {
+        nodeId = sn.id;
+      } else if (typeof sn === "number") {
+        nodeId = sn;
+      }
+      if (nodeId === undefined || nodeId === -1) return null;
       return sourceMap.get(nodeId) ?? null;
     },
 

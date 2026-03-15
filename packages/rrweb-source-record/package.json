@@ -25,7 +25,8 @@
   "scripts": {
     "build": "tsup",
     "watch": "tsup --watch",
-    "dev": "pnpm build && pnpm watch"
+    "dev": "pnpm build && pnpm watch",
+    "test": "vitest run"
   },
   "dependencies": {
     "agentation": "workspace:*"
@@ -34,8 +35,10 @@
     "rrweb": ">=2.0.0-alpha.0"
   },
   "devDependencies": {
+    "jsdom": "^24.0.0",
     "rrweb": "^2.0.0-alpha.20",
     "tsup": "^8.0.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
   }
 }
