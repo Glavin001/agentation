@@ -18,6 +18,7 @@
 //
 // =============================================================================
 
+import { record } from "rrweb";
 import type { ReactDetectionConfig } from "agentation";
 import { resolveElement, shouldResolveElement } from "./resolve";
 import { PLUGIN_NAME } from "./types";
@@ -45,15 +46,22 @@ export interface SourceRecordPluginOptions {
 
 /**
  * Get the rrweb mirror ID for a DOM node.
- * rrweb attaches a `__sn` property to serialized DOM nodes containing the ID.
+ * Uses rrweb's record.mirror to look up the serialization ID assigned during recording.
  */
 function getMirrorId(node: Node): number {
-  // rrweb 2.x attaches __sn with id to serialized nodes
+  // rrweb 2.x: use record.mirror (the active recording's mirror)
+  const mirror = record.mirror;
+  if (mirror && typeof mirror.getId === "function") {
+    const id = mirror.getId(node as any);
+    if (typeof id === "number" && id !== -1) {
+      return id;
+    }
+  }
+  // Fallback: check __sn property (older rrweb versions)
   const sn = (node as any).__sn;
   if (sn && typeof sn === "object" && typeof sn.id === "number") {
     return sn.id;
   }
-  // Fallback: try the rrweb-snapshot mirror's getId
   if (typeof sn === "number") {
     return sn;
   }

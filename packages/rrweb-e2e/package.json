@@ -1,0 +1,19 @@
+{
+  "name": "@agentation/rrweb-e2e",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "test": "npx playwright test",
+    "test:headed": "npx playwright test --headed"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "rrweb": "^2.0.0-alpha.20",
+    "rrweb-player": "^2.0.0-alpha.20",
+    "@agentation/rrweb-source-record": "workspace:*",
+    "@agentation/rrweb-source-replay": "workspace:*",
+    "@agentation/rrweb-annotator": "workspace:*",
+    "agentation": "workspace:*",
+    "vite": "^5.0.0"
+  }
+}
