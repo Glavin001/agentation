@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "test": "npx playwright test",
-    "test:headed": "npx playwright test --headed"
+    "test:headed": "npx playwright test --headed",
+    "demo": "npx vite --open /demo.html"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",

@@ -7,6 +7,7 @@
     "build": "pnpm --filter agentation build",
     "build:rrweb": "pnpm --filter agentation build && pnpm --filter @agentation/rrweb-source-record build && pnpm --filter @agentation/rrweb-source-replay build && pnpm --filter @agentation/rrweb-annotator build",
     "example": "pnpm --filter feedback-tool-example dev",
+    "demo": "pnpm build:rrweb && pnpm --filter @agentation/rrweb-e2e demo",
     "pack": "cd package && pnpm pack",
     "mcp": "pnpm --filter agentation-mcp start",
     "publish:agentation": "pnpm --filter agentation publish --access public",
