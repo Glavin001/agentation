@@ -30,6 +30,31 @@ function isMajorVersion(version: string): boolean {
 
 const releases: Release[] = [
   {
+    version: "2.3.3",
+    date: "March 14, 2026",
+    changes: [
+      { type: "improved", text: "Marker colors now use Display P3 on wide-gamut screens, with sRGB fallback" },
+      { type: "fixed", text: <><code>className</code> prop can now override toolbar positioning without <code>!important</code></> },
+    ],
+  },
+  {
+    version: "2.3.2",
+    date: "March 9, 2026",
+    changes: [
+      { type: "fixed", text: "Host page SVG icons broken by unscoped fill protection rule (e.g. Tailwind's fill-current)" },
+      { type: "fixed", text: "Toolbar icon states rendering simultaneously when host CSS overrides inline opacity" },
+      { type: "fixed", text: "Annotation textarea losing focus when annotating inputs inside modals and drawers (Radix, shadcn, vaul)" },
+      { type: "fixed", text: "Next.js App Router internals (SegmentViewNode) shown instead of actual React component names" },
+    ],
+  },
+  {
+    version: "2.3.1",
+    date: "March 9, 2026",
+    changes: [
+      { type: "fixed", text: "Host app keyboard shortcuts firing while typing in annotation text areas and settings inputs" },
+    ],
+  },
+  {
     version: "2.3.0",
     date: "March 7, 2026",
     changes: [
