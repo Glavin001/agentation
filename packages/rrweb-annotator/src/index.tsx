@@ -6,6 +6,10 @@
 // Uses the SourceMapStore from @agentation/rrweb-source-replay to provide
 // rich element metadata (React components, source files) from the recording.
 //
+// Leverages agentation's AnnotationPopupCSS, identifyElement, computed styles,
+// accessibility info, and full path utilities for a rich annotation experience
+// matching the agentation toolbar's annotation quality.
+//
 // Usage:
 //   import { RRWebAnnotator } from '@agentation/rrweb-annotator';
 //   import { createSourceReplayPlugin } from '@agentation/rrweb-source-replay';
@@ -26,6 +30,18 @@
 
 import React, { useCallback, useRef, useState } from "react";
 import type { Annotation } from "agentation";
+import {
+  AnnotationPopupCSS,
+  identifyElement,
+  getElementPath,
+  getAccessibilityInfo,
+  getFullElementPath,
+  getNearbyElements,
+  getDetailedComputedStyles,
+  getElementClasses,
+  getNearbyText,
+} from "agentation";
+import type { AnnotationPopupCSSHandle } from "agentation";
 import type { SourceNodeInfo } from "@agentation/rrweb-source-replay";
 import type { RRWebAnnotatorProps, HighlightedElement } from "./types";
 import { useIframeFromPlayer } from "./use-iframe";
@@ -43,35 +59,6 @@ function generateId(): string {
 }
 
 /**
- * Build a CSS selector path for an element in the replay iframe.
- */
-function buildSelectorPath(el: Element, maxDepth = 4): string {
-  const parts: string[] = [];
-  let current: Element | null = el;
-  let depth = 0;
-
-  while (current && depth < maxDepth) {
-    let segment = current.tagName.toLowerCase();
-    if (current.id) {
-      segment += `#${current.id}`;
-      parts.unshift(segment);
-      break;
-    }
-    const classes = Array.from(current.classList)
-      .filter((c) => !c.startsWith("rr-")) // Skip rrweb internal classes
-      .slice(0, 2);
-    if (classes.length) {
-      segment += `.${classes.join(".")}`;
-    }
-    parts.unshift(segment);
-    current = current.parentElement;
-    depth++;
-  }
-
-  return parts.join(" > ");
-}
-
-/**
  * Format source location as a short string like "src/Button.tsx:42"
  */
 function formatSourceFile(
@@ -79,7 +66,6 @@ function formatSourceFile(
 ): string | undefined {
   if (!source) return undefined;
   let result = source.fileName;
-  // Shorten absolute paths
   const srcIdx = result.indexOf("/src/");
   if (srcIdx !== -1) {
     result = result.slice(srcIdx + 1);
@@ -91,18 +77,33 @@ function formatSourceFile(
   return result;
 }
 
+/** State for the pending annotation popup */
+interface PendingAnnotation {
+  element: Element;
+  elementName: string;
+  sourceInfo: SourceNodeInfo | null;
+  iframeRect: DOMRect;
+  containerRect: DOMRect;
+  /** Position for the popup in overlay coordinates */
+  popupPosition: { left: number; top: number };
+  /** Computed styles from agentation's utility */
+  computedStyles?: Record<string, string>;
+}
+
 /**
- * Create an Annotation from a clicked element and its source metadata.
+ * Create a full Annotation from a clicked element using agentation's utilities.
  */
 function createAnnotation(
   el: Element,
+  comment: string,
   sourceInfo: SourceNodeInfo | null,
   iframeRect: DOMRect,
   containerRect: DOMRect,
 ): Annotation {
   const elementRect = el.getBoundingClientRect();
+  const htmlEl = el as HTMLElement;
 
-  // Position relative to the overlay container (as percentage of width, px from top)
+  // Position relative to the overlay container
   const relX =
     ((iframeRect.left - containerRect.left + elementRect.x + elementRect.width / 2) /
       containerRect.width) *
@@ -110,18 +111,21 @@ function createAnnotation(
   const relY =
     iframeRect.top - containerRect.top + elementRect.y + elementRect.height / 2;
 
-  const tagName = el.tagName.toLowerCase();
+  // Use agentation's identifyElement for rich element naming
+  const identified = identifyElement(htmlEl);
+
+  // Use source info component name if available, otherwise agentation's identification
   const elementName =
     sourceInfo?.componentName ??
-    (el.id ? `${tagName}#${el.id}` : tagName);
+    identified.name;
 
   return {
     id: generateId(),
     x: relX,
     y: relY,
-    comment: "",
+    comment,
     element: elementName,
-    elementPath: sourceInfo?.selector ?? buildSelectorPath(el),
+    elementPath: sourceInfo?.selector ?? identified.path,
     timestamp: Date.now(),
     boundingBox: {
       x: elementRect.x,
@@ -129,19 +133,18 @@ function createAnnotation(
       width: elementRect.width,
       height: elementRect.height,
     },
-    cssClasses: sourceInfo?.cssClasses?.join(" "),
-    accessibility: sourceInfo?.accessibility
-      ? [
-          sourceInfo.accessibility.role
-            ? `role=${sourceInfo.accessibility.role}`
-            : null,
-          sourceInfo.accessibility.label
-            ? `aria-label=${sourceInfo.accessibility.label}`
-            : null,
-        ]
-          .filter(Boolean)
-          .join(", ") || undefined
-      : undefined,
+    // Use agentation utilities for rich metadata
+    cssClasses: sourceInfo?.cssClasses?.join(" ") || getElementClasses(htmlEl) || undefined,
+    accessibility: getAccessibilityInfo(htmlEl) || undefined,
+    fullPath: getFullElementPath(htmlEl) || undefined,
+    nearbyElements: getNearbyElements(htmlEl) || undefined,
+    nearbyText: getNearbyText(htmlEl) || undefined,
+    computedStyles: (() => {
+      const styles = getDetailedComputedStyles(htmlEl);
+      return Object.keys(styles).length > 0
+        ? Object.entries(styles).map(([k, v]) => `${k}: ${v}`).join("; ")
+        : undefined;
+    })(),
     reactComponents: sourceInfo?.reactComponents ?? undefined,
     sourceFile: formatSourceFile(sourceInfo?.source ?? null),
   };
@@ -150,10 +153,6 @@ function createAnnotation(
 /**
  * Translate a mouse event's page coordinates to the iframe's internal
  * coordinate space, then use elementFromPoint to find the target element.
- *
- * The iframe may be visually scaled by rrweb-player's CSS transform.
- * We compute the scale factor (visual size / internal size) and divide
- * the visual-space offset by it to get internal coordinates.
  */
 function elementFromOverlayEvent(
   e: React.MouseEvent,
@@ -162,8 +161,6 @@ function elementFromOverlayEvent(
   if (!iframe?.contentDocument) return null;
 
   const iframeRect = iframe.getBoundingClientRect();
-
-  // Visual-space offset from the iframe's top-left
   const visualX = e.clientX - iframeRect.left;
   const visualY = e.clientY - iframeRect.top;
 
@@ -171,9 +168,6 @@ function elementFromOverlayEvent(
     return null;
   }
 
-  // Convert from visual (scaled) space to iframe-internal (unscaled) space.
-  // iframe.clientWidth/Height is the CSS layout size (unscaled).
-  // iframeRect.width/height is the visual size after parent CSS transforms.
   const internalWidth = iframe.clientWidth;
   const internalHeight = iframe.clientHeight;
   if (internalWidth === 0 || internalHeight === 0) return null;
@@ -188,15 +182,32 @@ function elementFromOverlayEvent(
 }
 
 /**
+ * Compute the visual position of an element's bounding box in overlay space,
+ * accounting for the iframe's CSS transform scale.
+ */
+function getVisualRect(
+  el: Element,
+  iframe: HTMLIFrameElement,
+  containerRect: DOMRect,
+): { left: number; top: number; width: number; height: number } {
+  const elementRect = el.getBoundingClientRect();
+  const iframeRect = iframe.getBoundingClientRect();
+  const scaleX = iframeRect.width / iframe.clientWidth;
+  const scaleY = iframeRect.height / iframe.clientHeight;
+
+  return {
+    left: iframeRect.left - containerRect.left + elementRect.x * scaleX,
+    top: iframeRect.top - containerRect.top + elementRect.y * scaleY,
+    width: elementRect.width * scaleX,
+    height: elementRect.height * scaleY,
+  };
+}
+
+/**
  * RRWebAnnotator — annotation overlay for rrweb replay player.
  *
- * Mount this component on top of an rrweb-player container. It renders an
- * overlay that intercepts mouse events, translates coordinates to the
- * replay iframe, and uses elementFromPoint to identify the target element.
- *
- * This approach works with sandboxed iframes (sandbox="allow-same-origin")
- * where attaching event listeners to contentDocument does not receive
- * browser-dispatched events.
+ * Uses agentation's AnnotationPopupCSS for the annotation UI and
+ * agentation's element identification utilities for rich metadata.
  */
 export function RRWebAnnotator({
   playerRef,
@@ -209,12 +220,14 @@ export function RRWebAnnotator({
   const iframe = useIframeFromPlayer(playerRef);
   const [highlight, setHighlight] = useState<HighlightedElement | null>(null);
   const [isActive, setIsActive] = useState(false);
+  const [pending, setPending] = useState<PendingAnnotation | null>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
+  const popupRef = useRef<AnnotationPopupCSSHandle>(null);
 
   // Handle hover — translate coordinates and find element under cursor
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
-      if (!isActive) return;
+      if (!isActive || pending) return; // Don't highlight while popup is open
 
       const target = elementFromOverlayEvent(e, iframe);
       if (!target || target === iframe?.contentDocument?.documentElement) {
@@ -238,13 +251,19 @@ export function RRWebAnnotator({
         reactComponents: sourceInfo?.reactComponents,
       });
     },
-    [isActive, iframe, sourceStore],
+    [isActive, iframe, sourceStore, pending],
   );
 
-  // Handle click — create annotation from element under cursor
+  // Handle click — open annotation popup using agentation's AnnotationPopupCSS
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
       if (!isActive || !iframe || !playerRef.current) return;
+
+      // If popup is open and click is outside it, shake or close
+      if (pending) {
+        popupRef.current?.shake();
+        return;
+      }
 
       const target = elementFromOverlayEvent(e, iframe);
       if (!target) return;
@@ -253,21 +272,64 @@ export function RRWebAnnotator({
       const iframeRect = iframe.getBoundingClientRect();
       const containerRect = playerRef.current.getBoundingClientRect();
 
-      const annotation = createAnnotation(
-        target,
+      // Use agentation's identifyElement for the popup header
+      const identified = identifyElement(target as HTMLElement);
+      const elementName = sourceInfo?.componentName
+        ? `<${sourceInfo.componentName}>`
+        : identified.name;
+
+      // Compute popup position in overlay coordinates (below the element)
+      const visualRect = getVisualRect(target, iframe, containerRect);
+      const popupLeft = Math.min(
+        visualRect.left,
+        containerRect.width - 320, // popup max width ~300px
+      );
+      const popupTop = visualRect.top + visualRect.height + 8;
+
+      // Get computed styles using agentation's utility
+      const computedStyles = getDetailedComputedStyles(target as HTMLElement);
+
+      setPending({
+        element: target,
+        elementName,
         sourceInfo,
         iframeRect,
         containerRect,
+        popupPosition: { left: Math.max(8, popupLeft), top: popupTop },
+        computedStyles: Object.keys(computedStyles).length > 0 ? computedStyles : undefined,
+      });
+    },
+    [isActive, iframe, playerRef, sourceStore, pending],
+  );
+
+  // Handle annotation submission from popup
+  const handlePopupSubmit = useCallback(
+    (comment: string) => {
+      if (!pending) return;
+
+      const annotation = createAnnotation(
+        pending.element,
+        comment,
+        pending.sourceInfo,
+        pending.iframeRect,
+        pending.containerRect,
       );
       onAnnotation?.(annotation);
+      setPending(null);
+      setHighlight(null);
     },
-    [isActive, iframe, playerRef, sourceStore, onAnnotation],
+    [pending, onAnnotation],
   );
+
+  // Handle popup cancel
+  const handlePopupCancel = useCallback(() => {
+    setPending(null);
+  }, []);
 
   // Handle mouse leave
   const handleMouseLeave = useCallback(() => {
-    setHighlight(null);
-  }, []);
+    if (!pending) setHighlight(null);
+  }, [pending]);
 
   // Toggle button style
   const buttonStyle: React.CSSProperties = {
@@ -295,7 +357,7 @@ export function RRWebAnnotator({
         position: "absolute",
         inset: 0,
         pointerEvents: isActive ? "auto" : "none",
-        cursor: isActive ? "crosshair" : undefined,
+        cursor: isActive && !pending ? "crosshair" : undefined,
       }}
       onMouseMove={isActive ? handleMouseMove : undefined}
       onClick={isActive ? handleClick : undefined}
@@ -308,20 +370,48 @@ export function RRWebAnnotator({
         onClick={(e) => {
           e.stopPropagation();
           setIsActive(!isActive);
-          if (isActive) setHighlight(null);
+          if (isActive) {
+            setHighlight(null);
+            setPending(null);
+          }
         }}
       >
         {isActive ? "Stop Annotating" : "Annotate"}
       </button>
 
       {/* Highlight overlay */}
-      {isActive && (
+      {isActive && !pending && (
         <AnnotationOverlay
           iframe={iframe}
           highlight={highlight}
           accentColor={accentColor}
           showSourceInfo={showSourceInfo}
         />
+      )}
+
+      {/* Agentation annotation popup */}
+      {pending && (
+        <div
+          style={{ pointerEvents: "auto" }}
+          onClick={(e) => e.stopPropagation()}
+          data-annotation-popup-wrapper
+        >
+          <AnnotationPopupCSS
+            ref={popupRef}
+            element={pending.elementName}
+            placeholder="What should change?"
+            onSubmit={handlePopupSubmit}
+            onCancel={handlePopupCancel}
+            accentColor={accentColor}
+            computedStyles={pending.computedStyles}
+            style={{
+              position: "absolute",
+              left: pending.popupPosition.left,
+              top: pending.popupPosition.top,
+              zIndex: 30,
+            }}
+          />
+        </div>
       )}
     </div>
   );

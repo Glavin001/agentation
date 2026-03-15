@@ -286,6 +286,11 @@ function renderAnnotations() {
     html += `<span class="ann-element">${escapeHtml(ann.element)}</span>`;
     html += `<span class="ann-id">${ann.id}</span>`;
     html += `</div>`;
+
+    if (ann.comment) {
+      html += `<div class="ann-comment">${escapeHtml(ann.comment)}</div>`;
+    }
+
     html += `<div class="ann-detail">`;
 
     html += `<span class="ann-label">Path:</span> <span class="ann-value">${escapeHtml(ann.elementPath)}</span><br>`;

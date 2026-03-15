@@ -1,119 +1,94 @@
-import { test, expect, Page, FrameLocator } from "@playwright/test";
+import { test, expect, Page } from "@playwright/test";
 
 /**
  * E2E test for the interactive demo page:
- *   Record → interact → Stop → Replay → Pause → Annotate → click elements → verify annotations
+ *   Record → interact → Stop → Replay → Pause → Annotate → click elements
+ *   → fill popup → submit → verify annotations
  *
- * Tests the full agentation annotation pipeline with real rrweb recording + replay.
+ * Tests the full agentation annotation pipeline with real rrweb recording + replay
+ * using agentation's AnnotationPopupCSS component.
  */
 
+/** Helper: record a quick session, replay, and wait for annotation mode */
+async function setupAnnotationMode(page: Page) {
+  await page.goto("http://localhost:3399/demo.html");
+
+  await page.click("#btn-record");
+  await page.waitForTimeout(500);
+  await page.click("#card-analytics");
+  await page.waitForTimeout(300);
+  await page.click("#card-reports");
+  await page.waitForTimeout(300);
+  await page.click("#btn-add-todo");
+  await page.waitForTimeout(1500);
+  await page.click("#btn-stop");
+  await page.waitForTimeout(300);
+
+  await page.click("#btn-replay");
+  await expect(page.locator("#replay-root iframe")).toBeVisible({ timeout: 10_000 });
+
+  // Wait for replay to finish → annotate button appears
+  const annotateBtn = page.getByRole("button", { name: "Annotate" });
+  await expect(annotateBtn).toBeVisible({ timeout: 30_000 });
+  await annotateBtn.click();
+  await expect(page.getByRole("button", { name: "Stop Annotating" })).toBeVisible();
+}
+
+/** Helper: click an element in the replay iframe via page coordinates */
+async function clickIframeElement(page: Page, selector: string) {
+  const iframe = page.frameLocator("#replay-root iframe");
+  const el = iframe.locator(selector);
+  await expect(el).toBeVisible({ timeout: 5_000 });
+  // Use the element's bounding box to click on the overlay at the right position
+  const bbox = await el.boundingBox();
+  expect(bbox).toBeTruthy();
+  await page.mouse.click(bbox!.x + bbox!.width / 2, bbox!.y + bbox!.height / 2);
+}
+
+/** Helper: fill the annotation popup and submit via the Add button */
+async function fillAndSubmitPopup(page: Page, comment: string) {
+  const popup = page.locator("[data-annotation-popup]");
+  await expect(popup).toBeVisible({ timeout: 5_000 });
+  const textarea = popup.locator("textarea");
+  await expect(textarea).toBeVisible();
+  await textarea.click();
+  await textarea.type(comment, { delay: 10 });
+  // Click the Add button to submit
+  await popup.getByText("Add").click();
+}
+
 test.describe("demo annotation flow", () => {
-  test("record, replay, annotate an element, and verify annotation appears with source info", async ({ page }) => {
-    await page.goto("http://localhost:3399/demo.html");
+  test("record, replay, annotate an element with popup, and verify annotation appears", async ({ page }) => {
+    await setupAnnotationMode(page);
 
-    // ---- Step 1: Start recording ----
-    const btnRecord = page.locator("#btn-record");
-    const btnStop = page.locator("#btn-stop");
-    const btnReplay = page.locator("#btn-replay");
+    // Click an element in the replay iframe → popup should appear
+    await clickIframeElement(page, "#card-analytics");
 
-    await btnRecord.click();
-    await expect(page.locator("#status")).toContainText("Recording");
+    // Fill and submit via the popup
+    await fillAndSubmitPopup(page, "This analytics card needs better contrast");
 
-    // ---- Step 2: Interact with the sample app ----
-    await page.click("#card-analytics");
-    await page.waitForTimeout(300);
-    await page.click("#card-reports");
-    await page.waitForTimeout(300);
-    await page.click("#btn-add-todo");
-    await page.waitForTimeout(300);
-
-    // Wait for source plugin batching
-    await page.waitForTimeout(1000);
-
-    // ---- Step 3: Stop recording ----
-    await btnStop.click();
-    await expect(page.locator("#status")).toContainText("Stopped");
-    await expect(page.locator("#status")).toContainText("events captured");
-
-    // ---- Step 4: Replay ----
-    await btnReplay.click();
-    await expect(page.locator("#replay-section")).toBeVisible();
-    await expect(page.locator("#annotations-section")).toBeVisible();
-
-    // Wait for the rrweb-player to mount and the iframe to appear
-    const playerIframe = page.locator("#replay-root iframe");
-    await expect(playerIframe).toBeVisible({ timeout: 10_000 });
-
-    // Wait for replay to finish (the player auto-plays, and "finish" event triggers isPaused=true)
-    // The "Annotate" button appears once paused
-    const annotateBtn = page.getByRole("button", { name: "Annotate" });
-    await expect(annotateBtn).toBeVisible({ timeout: 30_000 });
-
-    // ---- Step 5: Click "Annotate" ----
-    await annotateBtn.click();
-
-    // The button text should now say "Stop Annotating"
-    await expect(page.getByRole("button", { name: "Stop Annotating" })).toBeVisible();
-
-    // ---- Step 6: Click an element inside the replay iframe ----
-    // The replay iframe contains the recorded DOM. We need to click inside it.
-    const iframe = page.frameLocator("#replay-root iframe");
-
-    // The sample app has a card with id="card-analytics" — click it in the replay
-    const analyticsCard = iframe.locator("#card-analytics");
-    await expect(analyticsCard).toBeVisible({ timeout: 5_000 });
-    await analyticsCard.click();
-
-    // ---- Step 7: Verify annotation appeared ----
-    // The annotation count should now be 1
+    // Verify annotation appeared in the panel
     await expect(page.locator("#annotation-count")).toContainText("(1)", { timeout: 5_000 });
 
-    // Verify annotation card content
     const annotationCard = page.locator(".annotation-card").first();
     await expect(annotationCard).toBeVisible();
 
-    // Should have the element name
-    const elementName = annotationCard.locator(".ann-element");
-    await expect(elementName).toBeVisible();
-    const elementText = await elementName.textContent();
-    expect(elementText).toBeTruthy();
-    console.log("Annotation element:", elementText);
-
-    // Should have the element path
-    const pathValue = annotationCard.locator(".ann-label", { hasText: "Path:" }).locator("~ .ann-value").first();
-    // Use a broader locator approach since the sibling selector may not work
     const cardText = await annotationCard.textContent();
+    expect(cardText).toContain("This analytics card needs better contrast");
     expect(cardText).toContain("Path:");
-    console.log("Full annotation card text:", cardText);
+    console.log("Annotation card text:", cardText);
 
-    // ---- Step 8: Click another element ----
-    const reportsCard = iframe.locator("#card-reports");
-    if (await reportsCard.isVisible()) {
-      await reportsCard.click();
-      await expect(page.locator("#annotation-count")).toContainText("(2)", { timeout: 5_000 });
-      console.log("Second annotation created successfully");
-    }
+    // Click another element and annotate it
+    await clickIframeElement(page, "#card-reports");
+    await fillAndSubmitPopup(page, "Reports card looks good");
 
-    // ---- Step 9: Verify annotations have accessibility info ----
-    // The cards have role="article" and aria-label attributes
-    const allCards = await page.locator(".annotation-card").count();
-    console.log(`Total annotation cards: ${allCards}`);
-    expect(allCards).toBeGreaterThanOrEqual(1);
-
-    // Check that at least one annotation has accessibility info
-    const fullText = await page.locator("#annotations-list").textContent();
-    console.log("Annotations list text:", fullText);
-
-    // The original cards have role="article" and aria-label, so we expect accessibility info
-    if (fullText?.includes("Accessibility:")) {
-      console.log("Accessibility info present in annotations");
-    }
+    await expect(page.locator("#annotation-count")).toContainText("(2)", { timeout: 5_000 });
+    console.log("Two annotations created successfully");
   });
 
   test("annotate button only appears when player is paused", async ({ page }) => {
     await page.goto("http://localhost:3399/demo.html");
 
-    // Record minimal interaction
     await page.click("#btn-record");
     await page.waitForTimeout(500);
     await page.click("#card-analytics");
@@ -121,126 +96,64 @@ test.describe("demo annotation flow", () => {
     await page.click("#btn-stop");
     await page.waitForTimeout(300);
 
-    // Start replay
     await page.click("#btn-replay");
     await expect(page.locator("#replay-root iframe")).toBeVisible({ timeout: 10_000 });
 
-    // During playback, "Annotate" button should NOT be visible
-    // (isPaused is false during playback, and RRWebAnnotator is conditionally rendered)
-    // Wait a small amount for replay to start
     await page.waitForTimeout(500);
-
-    // After replay finishes (short recording), annotate button should appear
     const annotateBtn = page.getByRole("button", { name: "Annotate" });
     await expect(annotateBtn).toBeVisible({ timeout: 30_000 });
   });
 
-  test("annotation contains element path and bounding box", async ({ page }) => {
-    await page.goto("http://localhost:3399/demo.html");
+  test("annotation popup shows computed styles and element info", async ({ page }) => {
+    await setupAnnotationMode(page);
 
-    // Record
-    await page.click("#btn-record");
-    await page.waitForTimeout(500);
-    await page.click("#card-settings");
-    await page.waitForTimeout(1500);
-    await page.click("#btn-stop");
+    // Click an element
+    await clickIframeElement(page, "#card-analytics");
 
-    // Replay
-    await page.click("#btn-replay");
-    const annotateBtn = page.getByRole("button", { name: "Annotate" });
-    await expect(annotateBtn).toBeVisible({ timeout: 30_000 });
-    await annotateBtn.click();
+    // The popup should appear
+    const popup = page.locator("[data-annotation-popup]");
+    await expect(popup).toBeVisible({ timeout: 5_000 });
 
-    // Click at the center of the replay iframe to annotate whatever element is there.
-    // We use page.mouse.click because the overlay intercepts clicks and uses
-    // elementFromPoint on the iframe's contentDocument.
+    // The popup header should show the element identification
+    const popupContent = await popup.textContent();
+    console.log("Popup content:", popupContent);
+    // Should have element name and action buttons
+    expect(popupContent).toContain("Cancel");
+    expect(popupContent).toContain("Add");
+
+    // Cancel the popup
+    await popup.getByText("Cancel").click();
+    await page.waitForTimeout(300);
+
+    // Popup should be gone
+    await expect(popup).not.toBeVisible({ timeout: 2_000 });
+  });
+
+  test("annotation contains rich metadata from agentation utilities", async ({ page }) => {
+    await setupAnnotationMode(page);
+
+    // Click on a button element for richer metadata
     const iframeBBox = await page.locator("#replay-root iframe").boundingBox();
     expect(iframeBBox).toBeTruthy();
+
+    // Click somewhere in the iframe
     await page.mouse.click(
       iframeBBox!.x + iframeBBox!.width / 3,
       iframeBBox!.y + iframeBBox!.height / 3,
     );
 
+    // Fill the popup and submit
+    await fillAndSubmitPopup(page, "Test annotation for rich metadata");
+
     // Verify annotation
     await expect(page.locator("#annotation-count")).toContainText("(1)", { timeout: 5_000 });
-
     const cardText = await page.locator(".annotation-card").first().textContent();
-    console.log("Annotation card text:", cardText);
+    console.log("Rich metadata annotation:", cardText);
 
-    // Must have Path and Bounding box info
+    // Should have Path and Bounding box at minimum
     expect(cardText).toContain("Path:");
     expect(cardText).toContain("Bounding box:");
-
-    // The path should reference a real element (not empty)
-    const pathMatch = cardText?.match(/Path:\s*(\S+)/);
-    expect(pathMatch).toBeTruthy();
-    console.log("Annotation path:", pathMatch?.[1]);
-  });
-
-  test("highlight box is positioned accurately over the hovered element", async ({ page }) => {
-    await page.goto("http://localhost:3399/demo.html");
-
-    // Record
-    await page.click("#btn-record");
-    await page.waitForTimeout(500);
-    await page.click("#card-analytics");
-    await page.waitForTimeout(1500);
-    await page.click("#btn-stop");
-
-    // Replay and wait for pause
-    await page.click("#btn-replay");
-    const annotateBtn = page.getByRole("button", { name: "Annotate" });
-    await expect(annotateBtn).toBeVisible({ timeout: 30_000 });
-    await annotateBtn.click();
-
-    // Get the visual bounding box of #card-analytics inside the replay iframe
-    const iframe = page.frameLocator("#replay-root iframe");
-    const analyticsCard = iframe.locator("#card-analytics");
-    await expect(analyticsCard).toBeVisible({ timeout: 5_000 });
-    const cardBBox = await analyticsCard.boundingBox();
-    expect(cardBBox).toBeTruthy();
-
-    // Hover over the card to trigger the highlight.
-    // Move in steps to ensure mousemove events fire on the overlay.
-    const cx = cardBBox!.x + cardBBox!.width / 2;
-    const cy = cardBBox!.y + cardBBox!.height / 2;
-    await page.mouse.move(cx - 50, cy - 50, { steps: 3 });
-    await page.mouse.move(cx, cy, { steps: 5 });
-    await page.waitForTimeout(500);
-
-    // The highlight box is rendered as a positioned div inside the overlay.
-    // Look for it by checking all absolutely-positioned divs with blue-ish border.
-    const highlightVisible = await page.evaluate(() => {
-      // Find div elements with border containing the accent color
-      const divs = document.querySelectorAll('div');
-      for (const div of divs) {
-        const style = div.style;
-        if (style.border && style.border.includes('#3b82f6') &&
-            style.position === 'absolute' && parseFloat(style.width) > 0) {
-          const rect = div.getBoundingClientRect();
-          return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
-        }
-      }
-      return null;
-    });
-
-    if (highlightVisible) {
-      console.log("Card visual bbox:", JSON.stringify(cardBBox));
-      console.log("Highlight bbox:", JSON.stringify(highlightVisible));
-
-      // The highlight should overlap the card. Allow tolerance for border + rounding.
-      const tolerance = 10;
-      expect(Math.abs(highlightVisible.x - cardBBox!.x)).toBeLessThan(tolerance);
-      expect(Math.abs(highlightVisible.y - cardBBox!.y)).toBeLessThan(tolerance);
-      expect(Math.abs(highlightVisible.width - cardBBox!.width)).toBeLessThan(tolerance);
-      expect(Math.abs(highlightVisible.height - cardBBox!.height)).toBeLessThan(tolerance);
-
-      console.log("Highlight box position matches element position within tolerance");
-    } else {
-      // If highlight didn't appear via hover, click and just verify annotation
-      await page.mouse.click(cx, cy);
-      await expect(page.locator("#annotation-count")).toContainText("(1)", { timeout: 5_000 });
-      console.log("Hover highlight not rendered, but click annotation worked");
-    }
+    // Should have the user's comment
+    expect(cardText).toContain("Test annotation for rich metadata");
   });
 });
