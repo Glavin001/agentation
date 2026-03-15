@@ -90,6 +90,8 @@ export function createSourceRecordPlugin(
   name: string;
   observer: (
     cb: (payload: SourceMapPayload) => void,
+    win: Window,
+    options: SourceRecordPluginOptions,
   ) => () => void;
   options: SourceRecordPluginOptions;
 } {
@@ -108,13 +110,14 @@ export function createSourceRecordPlugin(
   return {
     name: PLUGIN_NAME,
 
-    observer(emit) {
+    observer(emit, win) {
       let disposed = false;
 
       // Resolve all elements in the document and emit a full source map
+      const doc = win?.document ?? document;
       function resolveFullSnapshot() {
         const nodes: Record<number, SourceNodeInfo> = {};
-        const allElements = document.querySelectorAll("*");
+        const allElements = doc.querySelectorAll("*");
         const elements = Array.from(allElements);
 
         let index = 0;
@@ -251,8 +254,8 @@ export function createSourceRecordPlugin(
       });
 
       // Start observing mutations
-      if (document.body) {
-        mutationObserver.observe(document.body, {
+      if (doc.body) {
+        mutationObserver.observe(doc.body, {
           childList: true,
           subtree: true,
         });
