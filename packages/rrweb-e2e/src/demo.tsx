@@ -97,7 +97,7 @@ function ReplayWithAnnotator({ events, onAnnotation }: ReplayWithAnnotatorProps)
   }, [onAnnotation]);
 
   return (
-    <div style={{ position: "relative" }}>
+    <div style={{ position: "relative", overflow: "hidden" }}>
       <div ref={playerContainerRef} />
 
       {/* Pause hint banner */}

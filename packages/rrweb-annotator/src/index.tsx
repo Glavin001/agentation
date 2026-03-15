@@ -24,7 +24,7 @@
 //
 // =============================================================================
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import type { Annotation } from "agentation";
 import type { SourceNodeInfo } from "@agentation/rrweb-source-replay";
 import type { RRWebAnnotatorProps, HighlightedElement } from "./types";
@@ -148,11 +148,36 @@ function createAnnotation(
 }
 
 /**
+ * Translate a mouse event's page coordinates to the iframe's content
+ * coordinate space, then use elementFromPoint to find the target element.
+ */
+function elementFromOverlayEvent(
+  e: React.MouseEvent,
+  iframe: HTMLIFrameElement | null,
+): Element | null {
+  if (!iframe?.contentDocument) return null;
+
+  const iframeRect = iframe.getBoundingClientRect();
+  const x = e.clientX - iframeRect.left;
+  const y = e.clientY - iframeRect.top;
+
+  if (x < 0 || y < 0 || x > iframeRect.width || y > iframeRect.height) {
+    return null;
+  }
+
+  return iframe.contentDocument.elementFromPoint(x, y);
+}
+
+/**
  * RRWebAnnotator — annotation overlay for rrweb replay player.
  *
- * Mount this component on top of an rrweb-player container. It attaches
- * click/hover listeners to the replay iframe and creates annotations
- * enriched with source metadata from the recording.
+ * Mount this component on top of an rrweb-player container. It renders an
+ * overlay that intercepts mouse events, translates coordinates to the
+ * replay iframe, and uses elementFromPoint to identify the target element.
+ *
+ * This approach works with sandboxed iframes (sandbox="allow-same-origin")
+ * where attaching event listeners to contentDocument does not receive
+ * browser-dispatched events.
  */
 export function RRWebAnnotator({
   playerRef,
@@ -165,12 +190,14 @@ export function RRWebAnnotator({
   const iframe = useIframeFromPlayer(playerRef);
   const [highlight, setHighlight] = useState<HighlightedElement | null>(null);
   const [isActive, setIsActive] = useState(false);
+  const overlayRef = useRef<HTMLDivElement>(null);
 
-  // Handle hover in iframe
+  // Handle hover — translate coordinates and find element under cursor
   const handleMouseMove = useCallback(
-    (e: MouseEvent) => {
+    (e: React.MouseEvent) => {
       if (!isActive) return;
-      const target = e.target as Element;
+
+      const target = elementFromOverlayEvent(e, iframe);
       if (!target || target === iframe?.contentDocument?.documentElement) {
         setHighlight(null);
         return;
@@ -195,14 +222,12 @@ export function RRWebAnnotator({
     [isActive, iframe, sourceStore],
   );
 
-  // Handle click in iframe
+  // Handle click — create annotation from element under cursor
   const handleClick = useCallback(
-    (e: MouseEvent) => {
+    (e: React.MouseEvent) => {
       if (!isActive || !iframe || !playerRef.current) return;
-      e.preventDefault();
-      e.stopPropagation();
 
-      const target = e.target as Element;
+      const target = elementFromOverlayEvent(e, iframe);
       if (!target) return;
 
       const sourceInfo = sourceStore.getByElement(target);
@@ -225,22 +250,6 @@ export function RRWebAnnotator({
     setHighlight(null);
   }, []);
 
-  // Attach/detach iframe event listeners
-  useEffect(() => {
-    if (!iframe?.contentDocument) return;
-
-    const doc = iframe.contentDocument;
-    doc.addEventListener("mousemove", handleMouseMove);
-    doc.addEventListener("click", handleClick);
-    doc.addEventListener("mouseleave", handleMouseLeave);
-
-    return () => {
-      doc.removeEventListener("mousemove", handleMouseMove);
-      doc.removeEventListener("click", handleClick);
-      doc.removeEventListener("mouseleave", handleMouseLeave);
-    };
-  }, [iframe, handleMouseMove, handleClick, handleMouseLeave]);
-
   // Toggle button style
   const buttonStyle: React.CSSProperties = {
     position: "absolute",
@@ -262,17 +271,23 @@ export function RRWebAnnotator({
 
   return (
     <div
+      ref={overlayRef}
       style={{
         position: "absolute",
         inset: 0,
         pointerEvents: isActive ? "auto" : "none",
+        cursor: isActive ? "crosshair" : undefined,
       }}
+      onMouseMove={isActive ? handleMouseMove : undefined}
+      onClick={isActive ? handleClick : undefined}
+      onMouseLeave={isActive ? handleMouseLeave : undefined}
     >
       {/* Toggle button */}
       <button
         type="button"
         style={buttonStyle}
-        onClick={() => {
+        onClick={(e) => {
+          e.stopPropagation();
           setIsActive(!isActive);
           if (isActive) setHighlight(null);
         }}
