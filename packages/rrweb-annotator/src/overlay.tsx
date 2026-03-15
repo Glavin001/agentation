@@ -13,19 +13,38 @@ interface AnnotationOverlayProps {
 }
 
 /**
- * Translates a bounding rect from the iframe's coordinate space to the
- * overlay's coordinate space (relative to the overlay container).
+ * Translates a bounding rect from the iframe's internal coordinate space
+ * to the overlay's coordinate space (relative to the overlay container).
+ *
+ * rrweb-player's .replayer-wrapper applies a CSS transform to scale the
+ * recorded content to fit the player dimensions. element.getBoundingClientRect()
+ * inside the iframe returns coordinates in the iframe's internal (unscaled)
+ * space, while the iframe's own getBoundingClientRect() returns its visual
+ * (scaled) position in page space. We compute the scale factor to bridge
+ * these two coordinate systems.
  */
 function translateRect(
-  iframeRect: DOMRect,
+  iframe: HTMLIFrameElement,
   elementRect: DOMRect,
   containerRect: DOMRect,
-): { x: number; y: number; width: number; height: number } {
+): { x: number; y: number; width: number; height: number } | null {
+  const iframeRect = iframe.getBoundingClientRect();
+
+  // Compute scale factor: visual (page) size vs internal (CSS) size.
+  // iframe.clientWidth is the iframe's CSS layout width (unscaled).
+  // iframeRect.width is the visual width after any parent CSS transforms.
+  const internalWidth = iframe.clientWidth;
+  const internalHeight = iframe.clientHeight;
+  if (internalWidth === 0 || internalHeight === 0) return null;
+
+  const scaleX = iframeRect.width / internalWidth;
+  const scaleY = iframeRect.height / internalHeight;
+
   return {
-    x: iframeRect.left - containerRect.left + elementRect.x,
-    y: iframeRect.top - containerRect.top + elementRect.y,
-    width: elementRect.width,
-    height: elementRect.height,
+    x: iframeRect.left - containerRect.left + elementRect.x * scaleX,
+    y: iframeRect.top - containerRect.top + elementRect.y * scaleY,
+    width: elementRect.width * scaleX,
+    height: elementRect.height * scaleY,
   };
 }
 
@@ -54,12 +73,11 @@ export function AnnotationOverlay({
       return;
     }
 
-    const iframeRect = iframe.getBoundingClientRect();
     const containerRect = overlayRef.current.getBoundingClientRect();
 
     try {
       const elementRect = highlight.element.getBoundingClientRect();
-      setRect(translateRect(iframeRect, elementRect, containerRect));
+      setRect(translateRect(iframe, elementRect, containerRect));
     } catch {
       setRect(null);
     }
