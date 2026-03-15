@@ -9,7 +9,7 @@
  *   5. Annotations appear in the panel below with full source metadata
  */
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { record } from "rrweb";
 import rrwebPlayer from "rrweb-player";
@@ -91,11 +91,6 @@ function ReplayWithAnnotator({ events, onAnnotation }: ReplayWithAnnotatorProps)
     replayer.on("finish", () => setIsPaused(true));
   }, [events]);
 
-  // When annotation happens, resume is available
-  const handleAnnotation = useCallback((annotation: Annotation) => {
-    onAnnotation(annotation);
-  }, [onAnnotation]);
-
   return (
     <div style={{ position: "relative", overflow: "hidden" }}>
       <div ref={playerContainerRef} />
@@ -119,14 +114,22 @@ function ReplayWithAnnotator({ events, onAnnotation }: ReplayWithAnnotatorProps)
         </div>
       )}
 
-      {/* Only show annotator when paused */}
+      {/* Full Agentation toolbar when paused */}
       {isPaused && store && (
         <RRWebAnnotator
           playerRef={playerContainerRef}
           sourceStore={store}
-          onAnnotation={handleAnnotation}
-          showSourceInfo={true}
-          accentColor="#3b82f6"
+          onAnnotationAdd={onAnnotation}
+          onAnnotationDelete={(ann) => {
+            const idx = annotations.findIndex(a => a.id === ann.id);
+            if (idx >= 0) annotations.splice(idx, 1);
+            renderAnnotations();
+          }}
+          onAnnotationsClear={() => {
+            annotations.length = 0;
+            renderAnnotations();
+          }}
+          onCopy={(markdown) => console.log("Copied annotations:", markdown)}
         />
       )}
     </div>
