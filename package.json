@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "pnpm --filter agentation watch & pnpm --filter feedback-tool-example dev",
     "build": "pnpm --filter agentation build",
+    "build:rrweb": "pnpm --filter agentation build && pnpm --filter @agentation/rrweb-source-record build && pnpm --filter @agentation/rrweb-source-replay build && pnpm --filter @agentation/rrweb-annotator build",
     "example": "pnpm --filter feedback-tool-example dev",
     "pack": "cd package && pnpm pack",
     "mcp": "pnpm --filter agentation-mcp start",
