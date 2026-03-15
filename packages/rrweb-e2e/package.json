@@ -8,13 +8,17 @@
     "demo": "npx vite --open /demo.html"
   },
   "devDependencies": {
-    "@playwright/test": "1.56.1",
-    "rrweb": "^2.0.0-alpha.20",
-    "rrweb-player": "^2.0.0-alpha.20",
+    "@agentation/rrweb-annotator": "workspace:*",
     "@agentation/rrweb-source-record": "workspace:*",
     "@agentation/rrweb-source-replay": "workspace:*",
-    "@agentation/rrweb-annotator": "workspace:*",
+    "@playwright/test": "1.56.1",
+    "@types/react": "^18.3.28",
+    "@types/react-dom": "^18.3.7",
     "agentation": "workspace:*",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "rrweb": "^2.0.0-alpha.20",
+    "rrweb-player": "^2.0.0-alpha.20",
     "vite": "^5.0.0"
   }
 }
