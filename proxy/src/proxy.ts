@@ -226,9 +226,13 @@ export function startProxy(options: ProxyOptions): http.Server {
   });
 
   server.listen(port, () => {
-    console.log(`[agentation-proxy] Proxying http://localhost:${port} → ${options.target}`);
+    const url = `http://localhost:${port}`;
+    console.log(`[agentation-proxy] Proxying ${url} → ${options.target}`);
     console.log(`[agentation-proxy] Agentation toolbar will be injected automatically`);
     console.log(`[agentation-proxy] MCP endpoint: ${mcpEndpoint}`);
+    console.log("");
+    console.log(`[agentation-proxy]   >>>  Open ${url} in your browser  <<<`);
+    console.log("");
   });
 
   return server;

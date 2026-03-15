@@ -11,7 +11,7 @@ Monorepo with four packages managed by pnpm workspaces. See `CLAUDE.md` for full
 | Package (watch + example site) | `pnpm dev` | dynamic (portless) | `portless` maps to `agentation.localhost:1355`; actual Next.js port is assigned dynamically |
 | Standalone proxy demo | `pnpm demo` | 3002 (HTML), 4748 (proxy) | Best way to demo the full annotation flow without React app |
 | MCP server | `pnpm mcp` | 4747 | Builds and starts MCP server |
-| All services | `pnpm dev:proxy` | 3001, 4747, 4748 | Example site + MCP + proxy together |
+| All services | `pnpm dev:proxy` | 13551, 4747, 4748 | Example site + MCP + proxy together; open http://localhost:4748 |
 
 ### Gotchas
 

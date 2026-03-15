@@ -15,15 +15,16 @@ A floating toolbar for annotating web pages and collecting structured feedback f
 
 ```bash
 pnpm install    # Install all workspace dependencies
-pnpm dev        # Package watch + website dev server  →  http://localhost:3001
+pnpm dev        # Package watch + website dev server  →  http://agentation.localhost:1355 (portless)
 pnpm build      # Build agentation package only
-pnpm example    # Website only                        →  http://localhost:3001
+pnpm example    # Website only                        →  http://agentation.localhost:1355 (portless)
+pnpm example:proxy  # Website on fixed port 13551     →  http://localhost:13551 (for use with proxy)
 pnpm mcp        # Build + start MCP server only       →  http://localhost:4747
-pnpm proxy      # Build + start MCP server + reverse proxy
+pnpm proxy      # Build + start MCP server + reverse proxy (run example:proxy first, or use dev:proxy)
                 #   mcp    → http://localhost:4747
                 #   proxy  → http://localhost:4748
 pnpm dev:proxy  # Example site + MCP server + proxy (all three)
-                #   app    → http://localhost:3001
+                #   app    → http://localhost:13551
                 #   mcp    → http://localhost:4747
                 #   proxy  → http://localhost:4748  ← open this in browser
 pnpm demo       # Standalone proxy demo (no example site needed)
@@ -38,7 +39,7 @@ pnpm demo       # Standalone proxy demo (no example site needed)
 | `agentation` | `package/` | public | React component + CSS |
 | `agentation-mcp` | `mcp/` | public | MCP server for AI agents |
 | `agentation-proxy` | `proxy/` | public | Reverse proxy for zero-config injection |
-| example site | `package/example/` | private | agentation.dev docs/demo (Next.js, port 3001) |
+| example site | `package/example/` | private | agentation.dev docs/demo (Next.js; portless or 13551 for proxy) |
 
 ## Important
 

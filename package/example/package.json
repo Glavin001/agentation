@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "portless agentation next dev",
+    "dev:proxy": "PORT=13551 next dev",
     "build": "next build",
     "start": "next start"
   },

@@ -30,7 +30,7 @@
     "watch": "tsup --watch",
     "dev": "pnpm build && pnpm watch",
     "start": "pnpm build && node dist/cli.js server",
-    "start:proxy": "pnpm build && node dist/cli.js server --proxy http://localhost:3001",
+    "start:proxy": "pnpm build && node dist/cli.js server --proxy http://localhost:13551",
     "prepublishOnly": "pnpm build"
   },
   "dependencies": {

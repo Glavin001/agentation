@@ -73,6 +73,17 @@ Agentation captures class names, selectors, and element positions so AI agents c
 - Node.js 18+ (for the proxy and MCP server)
 - Desktop browser (mobile not supported)
 
+## Development
+
+```bash
+pnpm install
+pnpm dev          # Package watch + example site (portless)
+pnpm dev:proxy    # Full flow: example + MCP + proxy — open http://localhost:4748
+pnpm demo         # Standalone proxy demo (plain HTML + proxy)
+```
+
+See [CLAUDE.md](./CLAUDE.md) for all commands and ports.
+
 ## Docs
 
 Full documentation at [agentation.dev](https://agentation.dev)
