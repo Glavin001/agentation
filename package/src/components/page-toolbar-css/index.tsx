@@ -502,6 +502,8 @@ export type PageFeedbackToolbarCSSProps = {
   containerRef?: React.RefObject<HTMLElement>;
   /** When true, disables localStorage persistence for annotations. Useful in container mode where the parent manages annotation state via callbacks. */
   disableStorage?: boolean;
+  /** Controlled annotations. When provided, the internal annotation state syncs from this prop. Use with disableStorage to let the parent manage annotation state. */
+  value?: Annotation[];
 };
 
 /** Alias for PageFeedbackToolbarCSSProps */
@@ -530,6 +532,7 @@ export function PageFeedbackToolbarCSS({
   targetIframe,
   containerRef,
   disableStorage,
+  value: controlledAnnotations,
 }: PageFeedbackToolbarCSSProps = {}) {
   // === Container mode: target an iframe instead of document ===
   const isContainerMode = !!targetIframe;
@@ -623,8 +626,15 @@ export function PageFeedbackToolbarCSS({
       ? (containerRef?.current?.clientHeight ?? window.innerHeight)
       : window.innerHeight;
   const [isActive, setIsActive] = useState(false);
-  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [annotations, setAnnotations] = useState<Annotation[]>(controlledAnnotations ?? []);
   const [showMarkers, setShowMarkers] = useState(true);
+
+  // Sync from controlled annotations prop
+  useEffect(() => {
+    if (controlledAnnotations !== undefined) {
+      setAnnotations(controlledAnnotations.filter(isRenderableAnnotation));
+    }
+  }, [controlledAnnotations]);
   const [isToolbarHidden, setIsToolbarHidden] = useState(() => loadToolbarHidden());
   const [isToolbarHiding, setIsToolbarHiding] = useState(false);
 

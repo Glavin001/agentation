@@ -54,6 +54,7 @@ function ReplayWithAnnotator({ events, onAnnotation }: ReplayWithAnnotatorProps)
   const [store, setStore] = useState<any>(null);
   const [isPaused, setIsPaused] = useState(false);
   const playerInstanceRef = useRef<rrwebPlayer | null>(null);
+  const [replayAnnotations, setReplayAnnotations] = useState<Annotation[]>([]);
 
   useEffect(() => {
     if (!playerContainerRef.current) return;
@@ -119,13 +120,19 @@ function ReplayWithAnnotator({ events, onAnnotation }: ReplayWithAnnotatorProps)
         <RRWebAnnotator
           playerRef={playerContainerRef}
           sourceStore={store}
-          onAnnotationAdd={onAnnotation}
+          value={replayAnnotations}
+          onAnnotationAdd={(ann) => {
+            setReplayAnnotations(prev => [...prev, ann]);
+            onAnnotation(ann);
+          }}
           onAnnotationDelete={(ann) => {
+            setReplayAnnotations(prev => prev.filter(a => a.id !== ann.id));
             const idx = annotations.findIndex(a => a.id === ann.id);
             if (idx >= 0) annotations.splice(idx, 1);
             renderAnnotations();
           }}
           onAnnotationsClear={() => {
+            setReplayAnnotations([]);
             annotations.length = 0;
             renderAnnotations();
           }}
