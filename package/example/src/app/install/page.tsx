@@ -218,7 +218,7 @@ export default function InstallPage() {
 
         <section>
           <h2>Install the package</h2>
-          <CodeBlock code="npm install agentation -D" language="bash" copyable />
+          <CodeBlock code="npm install @glavin001/agentation -D" language="bash" copyable />
           <p
             style={{
               fontSize: "0.875rem",
@@ -227,8 +227,8 @@ export default function InstallPage() {
             }}
           >
             Or use{" "}
-            <CopyablePackageManager name="yarn" command="yarn add agentation --dev" />,{" "}
-            <CopyablePackageManager name="pnpm" command="pnpm add agentation -D" />, or{" "}
+            <CopyablePackageManager name="yarn" command="yarn add @glavin001/agentation --dev" />,{" "}
+            <CopyablePackageManager name="pnpm" command="pnpm add @glavin001/agentation -D" />, or{" "}
             <CopyablePackageManager name="bun" command="bun add agentation -d" />.
           </p>
         </section>
@@ -241,7 +241,7 @@ export default function InstallPage() {
             development.
           </p>
           <CodeBlock
-            code={`import { Agentation } from "agentation";
+            code={`import { Agentation } from "@glavin001/agentation";
 
 function App() {
   return (

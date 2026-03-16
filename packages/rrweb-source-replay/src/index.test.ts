@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { createSourceReplayPlugin, createSourceMapStore, PLUGIN_NAME } from "./index";
-import { createSourceRecordPlugin } from "@agentation/rrweb-source-record";
+import { createSourceRecordPlugin } from "@glavin001/rrweb-source-record";
 import type { SourceNodeInfo, SourceMapPayload } from "./types";
 
 // Mock agentation (transitive dep via rrweb-source-record)
-vi.mock("agentation", () => ({
+vi.mock("@glavin001/agentation", () => ({
   identifyElement: (el: HTMLElement) => el.tagName.toLowerCase(),
   getElementPath: (el: HTMLElement) => el.tagName.toLowerCase(),
   getElementClasses: (el: HTMLElement) => el.className || "",

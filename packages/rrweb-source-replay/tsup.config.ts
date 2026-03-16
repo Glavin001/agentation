@@ -7,5 +7,5 @@ export default defineConfig({
   splitting: false,
   sourcemap: true,
   clean: true,
-  external: ["rrweb", "rrweb-snapshot", "@agentation/rrweb-source-record"],
+  external: ["rrweb", "rrweb-snapshot", "@glavin001/rrweb-source-record"],
 });

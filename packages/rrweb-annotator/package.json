@@ -1,5 +1,5 @@
 {
-  "name": "@agentation/rrweb-annotator",
+  "name": "@glavin001/rrweb-annotator",
   "version": "0.1.0",
   "description": "Agentation annotation adapter for rrweb player replay",
   "license": "PolyForm-Shield-1.0.0",
@@ -29,8 +29,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@agentation/rrweb-source-replay": "workspace:*",
-    "agentation": "workspace:*"
+    "@glavin001/rrweb-source-replay": "workspace:*",
+    "@glavin001/agentation": "workspace:*"
   },
   "peerDependencies": {
     "react": ">=18.0.0",

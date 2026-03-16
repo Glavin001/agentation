@@ -83,7 +83,7 @@ importers:
 
   package/example:
     dependencies:
-      agentation:
+      '@glavin001/agentation':
         specifier: workspace:*
         version: link:..
       beautiful-mermaid:
@@ -123,12 +123,12 @@ importers:
 
   packages/rrweb-annotator:
     dependencies:
-      '@agentation/rrweb-source-replay':
-        specifier: workspace:*
-        version: link:../rrweb-source-replay
-      agentation:
+      '@glavin001/agentation':
         specifier: workspace:*
         version: link:../../package
+      '@glavin001/rrweb-source-replay':
+        specifier: workspace:*
+        version: link:../rrweb-source-replay
     devDependencies:
       '@types/react':
         specifier: ^18.2.0
@@ -166,13 +166,16 @@ importers:
 
   packages/rrweb-e2e:
     devDependencies:
-      '@agentation/rrweb-annotator':
+      '@glavin001/agentation':
+        specifier: workspace:*
+        version: link:../../package
+      '@glavin001/rrweb-annotator':
         specifier: workspace:*
         version: link:../rrweb-annotator
-      '@agentation/rrweb-source-record':
+      '@glavin001/rrweb-source-record':
         specifier: workspace:*
         version: link:../rrweb-source-record
-      '@agentation/rrweb-source-replay':
+      '@glavin001/rrweb-source-replay':
         specifier: workspace:*
         version: link:../rrweb-source-replay
       '@playwright/test':
@@ -184,9 +187,6 @@ importers:
       '@types/react-dom':
         specifier: ^18.3.7
         version: 18.3.7(@types/react@18.3.28)
-      agentation:
-        specifier: workspace:*
-        version: link:../../package
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -205,7 +205,7 @@ importers:
 
   packages/rrweb-source-record:
     dependencies:
-      agentation:
+      '@glavin001/agentation':
         specifier: workspace:*
         version: link:../../package
     devDependencies:
@@ -227,7 +227,7 @@ importers:
 
   packages/rrweb-source-replay:
     dependencies:
-      '@agentation/rrweb-source-record':
+      '@glavin001/rrweb-source-record':
         specifier: workspace:*
         version: link:../rrweb-source-record
     devDependencies:

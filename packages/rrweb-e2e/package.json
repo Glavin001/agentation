@@ -1,5 +1,5 @@
 {
-  "name": "@agentation/rrweb-e2e",
+  "name": "@glavin001/rrweb-e2e",
   "version": "0.0.0",
   "private": true,
   "scripts": {
@@ -8,13 +8,13 @@
     "demo": "npx vite --open /demo.html"
   },
   "devDependencies": {
-    "@agentation/rrweb-annotator": "workspace:*",
-    "@agentation/rrweb-source-record": "workspace:*",
-    "@agentation/rrweb-source-replay": "workspace:*",
+    "@glavin001/rrweb-annotator": "workspace:*",
+    "@glavin001/rrweb-source-record": "workspace:*",
+    "@glavin001/rrweb-source-replay": "workspace:*",
     "@playwright/test": "1.56.1",
     "@types/react": "^18.3.28",
     "@types/react-dom": "^18.3.7",
-    "agentation": "workspace:*",
+    "@glavin001/agentation": "workspace:*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "rrweb": "^2.0.0-alpha.20",

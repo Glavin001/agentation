@@ -1,5 +1,5 @@
 {
-  "name": "@agentation/rrweb-source-replay",
+  "name": "@glavin001/rrweb-source-replay",
   "version": "0.1.0",
   "description": "rrweb ReplayPlugin that maintains a source map store during playback",
   "license": "PolyForm-Shield-1.0.0",
@@ -29,7 +29,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@agentation/rrweb-source-record": "workspace:*"
+    "@glavin001/rrweb-source-record": "workspace:*"
   },
   "peerDependencies": {
     "rrweb": ">=2.0.0-alpha.0"

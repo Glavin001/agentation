@@ -1,6 +1,6 @@
 {
-  "name": "agentation",
-  "version": "2.3.3",
+  "name": "@glavin001/agentation",
+  "version": "2.4.0",
   "description": "Visual feedback for AI coding agents",
   "sideEffects": false,
   "license": "PolyForm-Shield-1.0.0",

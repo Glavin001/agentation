@@ -27,7 +27,7 @@ const faqCategories: FAQCategory[] = [
       },
       {
         question: "How do I install it?",
-        answer: "Install via npm with <code>npm install agentation -D</code>, then import and add the <code>&lt;Agentation /&gt;</code> component to your app. Works with React 18 and Next.js."
+        answer: "Install via npm with <code>npm install @glavin001/agentation -D</code>, then import and add the <code>&lt;Agentation /&gt;</code> component to your app. Works with React 18 and Next.js."
       },
       {
         question: "Is there a Claude Code integration?",

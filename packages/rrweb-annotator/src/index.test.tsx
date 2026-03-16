@@ -4,7 +4,7 @@ import React from "react";
 // We test the utility functions directly rather than rendering the full component,
 // since the component depends on an rrweb player iframe which is hard to mock.
 
-describe("@agentation/rrweb-annotator", () => {
+describe("@glavin001/rrweb-annotator", () => {
   it("exports RRWebAnnotator component", async () => {
     const mod = await import("./index");
     expect(typeof mod.RRWebAnnotator).toBe("function");

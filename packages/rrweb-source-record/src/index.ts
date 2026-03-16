@@ -1,5 +1,5 @@
 // =============================================================================
-// @agentation/rrweb-source-record
+// @glavin001/rrweb-source-record
 // =============================================================================
 //
 // An rrweb RecordPlugin that captures element source metadata (React component
@@ -8,7 +8,7 @@
 //
 // Usage:
 //   import { record } from 'rrweb';
-//   import { createSourceRecordPlugin } from '@agentation/rrweb-source-record';
+//   import { createSourceRecordPlugin } from '@glavin001/rrweb-source-record';
 //
 //   const sourcePlugin = createSourceRecordPlugin();
 //   record({
@@ -19,7 +19,7 @@
 // =============================================================================
 
 import { record } from "rrweb";
-import type { ReactDetectionConfig } from "agentation";
+import type { ReactDetectionConfig } from "@glavin001/agentation";
 import { resolveElement, shouldResolveElement } from "./resolve";
 import { PLUGIN_NAME } from "./types";
 import type {

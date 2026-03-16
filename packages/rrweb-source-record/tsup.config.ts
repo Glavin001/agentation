@@ -7,5 +7,5 @@ export default defineConfig({
   splitting: false,
   sourcemap: true,
   clean: true,
-  external: ["rrweb", "rrweb-snapshot", "agentation", "react", "react-dom"],
+  external: ["rrweb", "rrweb-snapshot", "@glavin001/agentation", "react", "react-dom"],
 });
