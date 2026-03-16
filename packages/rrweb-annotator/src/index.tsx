@@ -78,6 +78,10 @@ export function RRWebAnnotator({
         zIndex: 10,
         // Let Agentation manage pointer-events based on isActive state
         pointerEvents: "none",
+        // transform creates a containing block for position:fixed descendants,
+        // making them position relative to this container instead of the viewport.
+        // This is essential for correct popup/overlay/marker positioning.
+        transform: "translate(0,0)",
       }}
       data-rrweb-annotator
     >

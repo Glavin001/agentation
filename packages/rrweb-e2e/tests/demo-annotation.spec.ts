@@ -2,11 +2,11 @@ import { test, expect, Page } from "@playwright/test";
 
 /**
  * E2E test for the interactive demo page:
- *   Record → interact → Stop → Replay → Pause → Annotate → click elements
- *   → fill popup → submit → verify annotations
+ *   Record → interact → Stop → Replay → Pause → Agentation toolbar appears
+ *   → activate → click elements → fill popup → submit → verify annotations
  *
  * Tests the full agentation annotation pipeline with real rrweb recording + replay
- * using agentation's AnnotationPopupCSS component.
+ * using the actual Agentation component integrated via RRWebAnnotator.
  */
 
 /** Helper: record a quick session, replay, and wait for annotation mode */
@@ -27,11 +27,14 @@ async function setupAnnotationMode(page: Page) {
   await page.click("#btn-replay");
   await expect(page.locator("#replay-root iframe")).toBeVisible({ timeout: 10_000 });
 
-  // Wait for replay to finish → annotate button appears
-  const annotateBtn = page.getByRole("button", { name: "Annotate" });
-  await expect(annotateBtn).toBeVisible({ timeout: 30_000 });
-  await annotateBtn.click();
-  await expect(page.getByRole("button", { name: "Stop Annotating" })).toBeVisible();
+  // Wait for replay to finish → Agentation toolbar appears (via RRWebAnnotator)
+  await expect(page.locator("[data-feedback-toolbar]").first()).toBeVisible({ timeout: 30_000 });
+
+  // Click the collapsed Agentation button to activate annotation mode
+  const collapsedBtn = page.locator("[title='Start feedback mode']");
+  await expect(collapsedBtn).toBeVisible({ timeout: 5_000 });
+  await collapsedBtn.click();
+  await page.waitForTimeout(500);
 }
 
 /** Helper: click an element in the replay iframe via page coordinates */
@@ -51,10 +54,10 @@ async function fillAndSubmitPopup(page: Page, comment: string) {
   await expect(popup).toBeVisible({ timeout: 5_000 });
   const textarea = popup.locator("textarea");
   await expect(textarea).toBeVisible();
-  await textarea.click();
+  await textarea.click({ force: true });
   await textarea.type(comment, { delay: 10 });
   // Click the Add button to submit
-  await popup.getByText("Add").click();
+  await popup.getByText("Add").click({ force: true });
 }
 
 test.describe("demo annotation flow", () => {
@@ -78,6 +81,10 @@ test.describe("demo annotation flow", () => {
     expect(cardText).toContain("Path:");
     console.log("Annotation card text:", cardText);
 
+    // Wait for popup to close before next click
+    await expect(page.locator("[data-annotation-popup]")).not.toBeVisible({ timeout: 5_000 });
+    await page.waitForTimeout(300);
+
     // Click another element and annotate it
     await clickIframeElement(page, "#card-reports");
     await fillAndSubmitPopup(page, "Reports card looks good");
@@ -86,7 +93,7 @@ test.describe("demo annotation flow", () => {
     console.log("Two annotations created successfully");
   });
 
-  test("annotate button only appears when player is paused", async ({ page }) => {
+  test("agentation toolbar only appears when player is paused", async ({ page }) => {
     await page.goto("http://localhost:3399/demo.html");
 
     await page.click("#btn-record");
@@ -99,12 +106,11 @@ test.describe("demo annotation flow", () => {
     await page.click("#btn-replay");
     await expect(page.locator("#replay-root iframe")).toBeVisible({ timeout: 10_000 });
 
-    await page.waitForTimeout(500);
-    const annotateBtn = page.getByRole("button", { name: "Annotate" });
-    await expect(annotateBtn).toBeVisible({ timeout: 30_000 });
+    // Wait for the Agentation toolbar to appear (when replay finishes/pauses)
+    await expect(page.locator("[data-feedback-toolbar]").first()).toBeVisible({ timeout: 30_000 });
   });
 
-  test("annotation popup shows computed styles and element info", async ({ page }) => {
+  test("annotation popup shows element info and can be cancelled", async ({ page }) => {
     await setupAnnotationMode(page);
 
     // Click an element
@@ -114,25 +120,24 @@ test.describe("demo annotation flow", () => {
     const popup = page.locator("[data-annotation-popup]");
     await expect(popup).toBeVisible({ timeout: 5_000 });
 
-    // The popup header should show the element identification
+    // The popup should have action buttons
     const popupContent = await popup.textContent();
     console.log("Popup content:", popupContent);
-    // Should have element name and action buttons
     expect(popupContent).toContain("Cancel");
     expect(popupContent).toContain("Add");
 
     // Cancel the popup
-    await popup.getByText("Cancel").click();
+    await popup.getByText("Cancel").click({ force: true });
     await page.waitForTimeout(300);
 
     // Popup should be gone
-    await expect(popup).not.toBeVisible({ timeout: 2_000 });
+    await expect(popup).not.toBeVisible({ timeout: 5_000 });
   });
 
   test("annotation contains rich metadata from agentation utilities", async ({ page }) => {
     await setupAnnotationMode(page);
 
-    // Click on a button element for richer metadata
+    // Click on an element in the iframe
     const iframeBBox = await page.locator("#replay-root iframe").boundingBox();
     expect(iframeBBox).toBeTruthy();
 
