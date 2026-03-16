@@ -1,8 +1,7 @@
 {
-  "name": "@glavin001/agentation",
-  "version": "2.4.0",
-  "description": "Visual feedback for AI coding agents",
-  "sideEffects": false,
+  "name": "@glavin001/rrweb-annotator",
+  "version": "0.1.0",
+  "description": "Agentation annotation adapter for rrweb player replay",
   "license": "PolyForm-Shield-1.0.0",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -27,37 +26,34 @@
     "build": "tsup",
     "watch": "tsup --watch",
     "dev": "pnpm build && pnpm watch",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "prepublishOnly": "pnpm build"
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@agentation/rrweb-source-replay": "workspace:@glavin001/rrweb-source-replay@*",
+    "agentation": "workspace:@glavin001/agentation@*"
   },
   "peerDependencies": {
     "react": ">=18.0.0",
-    "react-dom": ">=18.0.0"
+    "react-dom": ">=18.0.0",
+    "rrweb": ">=2.0.0-alpha.0",
+    "rrweb-player": ">=2.0.0-alpha.0"
   },
   "peerDependenciesMeta": {
-    "react": {
-      "optional": true
-    },
-    "react-dom": {
+    "rrweb-player": {
       "optional": true
     }
   },
   "devDependencies": {
-    "@testing-library/react": "^16.0.0",
-    "@types/node": "^20.0.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
-    "@vitejs/plugin-react": "^4.3.0",
-    "esbuild-sass-plugin": "^3.6.0",
-    "jsdom": "^25.0.0",
-    "postcss": "^8.5.6",
-    "postcss-modules": "^6.0.1",
+    "@vitejs/plugin-react": "^4.0.0",
+    "jsdom": "^24.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "sass": "^1.97.2",
+    "rrweb": "^2.0.0-alpha.20",
+    "rrweb-player": "^2.0.0-alpha.20",
     "tsup": "^8.0.0",
     "typescript": "^5.0.0",
-    "vitest": "^2.0.0"
+    "vitest": "^1.0.0"
   }
 }

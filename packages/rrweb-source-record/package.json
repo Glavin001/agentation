@@ -1,0 +1,44 @@
+{
+  "name": "@glavin001/rrweb-source-record",
+  "version": "0.1.0",
+  "description": "rrweb RecordPlugin that captures element source metadata during recording",
+  "license": "PolyForm-Shield-1.0.0",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "watch": "tsup --watch",
+    "dev": "pnpm build && pnpm watch",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "agentation": "workspace:@glavin001/agentation@*"
+  },
+  "peerDependencies": {
+    "rrweb": ">=2.0.0-alpha.0"
+  },
+  "devDependencies": {
+    "jsdom": "^24.0.0",
+    "rrweb": "^2.0.0-alpha.20",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}

@@ -347,12 +347,13 @@ function generateOutput(
   pathname: string,
   detailLevel: OutputDetailLevel = "standard",
   reactMode: ReactComponentMode = "filtered",
+  targetWin?: Window,
 ): string {
   if (annotations.length === 0) return "";
+  const win = targetWin ?? (typeof window !== "undefined" ? window : null);
 
-  const viewport =
-    typeof window !== "undefined"
-      ? `${window.innerWidth}×${window.innerHeight}`
+  const viewport = win
+      ? `${win.innerWidth}×${win.innerHeight}`
       : "unknown";
 
   let output = `## Page Feedback: ${pathname}\n`;
@@ -361,11 +362,11 @@ function generateOutput(
     // Full environment info for forensic mode
     output += `\n**Environment:**\n`;
     output += `- Viewport: ${viewport}\n`;
-    if (typeof window !== "undefined") {
-      output += `- URL: ${window.location.href}\n`;
+    if (win) {
+      output += `- URL: ${win.location.href}\n`;
       output += `- User Agent: ${navigator.userAgent}\n`;
       output += `- Timestamp: ${new Date().toISOString()}\n`;
-      output += `- Device Pixel Ratio: ${window.devicePixelRatio}\n`;
+      output += `- Device Pixel Ratio: ${win.devicePixelRatio}\n`;
     }
     output += `\n---\n`;
   } else if (detailLevel !== "compact") {
@@ -495,6 +496,14 @@ export type PageFeedbackToolbarCSSProps = {
   webhookUrl?: string;
   /** Custom class name applied to the toolbar container. Use to adjust positioning or z-index. */
   className?: string;
+  /** Target iframe for annotation. When set, click/hover handlers target iframe content instead of document. */
+  targetIframe?: React.RefObject<HTMLIFrameElement>;
+  /** Container element for overlay rendering. Required when targetIframe is set. */
+  containerRef?: React.RefObject<HTMLElement>;
+  /** When true, disables localStorage persistence for annotations. Useful in container mode where the parent manages annotation state via callbacks. */
+  disableStorage?: boolean;
+  /** Controlled annotations. When provided, the internal annotation state syncs from this prop. Use with disableStorage to let the parent manage annotation state. */
+  value?: Annotation[];
 };
 
 /** Alias for PageFeedbackToolbarCSSProps */
@@ -520,10 +529,112 @@ export function PageFeedbackToolbarCSS({
   onSessionCreated,
   webhookUrl,
   className: userClassName,
+  targetIframe,
+  containerRef,
+  disableStorage,
+  value: controlledAnnotations,
 }: PageFeedbackToolbarCSSProps = {}) {
+  // === Container mode: target an iframe instead of document ===
+  const isContainerMode = !!targetIframe;
+  const getDoc = (): Document =>
+    targetIframe?.current?.contentDocument ?? document;
+  const getWin = (): Window =>
+    (targetIframe?.current?.contentWindow as Window) ?? window;
+  const getViewportWidth = (): number =>
+    isContainerMode
+      ? (targetIframe?.current?.clientWidth ?? window.innerWidth)
+      : window.innerWidth;
+  const getViewportHeight = (): number =>
+    isContainerMode
+      ? (targetIframe?.current?.clientHeight ?? window.innerHeight)
+      : window.innerHeight;
+  const getScrollY = (): number =>
+    isContainerMode ? (getWin().scrollY ?? 0) : window.scrollY;
+  const getEventTarget = (): HTMLElement | Document =>
+    (isContainerMode ? containerRef?.current : null) ?? document;
+  // Translate page coordinates to iframe-internal coordinates
+  const translateToInternal = (
+    clientX: number,
+    clientY: number,
+  ): { x: number; y: number } => {
+    const iframe = targetIframe?.current;
+    if (!iframe) return { x: clientX, y: clientY };
+    const rect = iframe.getBoundingClientRect();
+    const scaleX = rect.width / iframe.clientWidth;
+    const scaleY = rect.height / iframe.clientHeight;
+    return {
+      x: (clientX - rect.left) / scaleX,
+      y: (clientY - rect.top) / scaleY,
+    };
+  };
+  // iframe-aware elementFromPoint
+  const elementFromPointTarget = (
+    clientX: number,
+    clientY: number,
+  ): HTMLElement | null => {
+    if (!isContainerMode) return deepElementFromPoint(clientX, clientY);
+    const { x, y } = translateToInternal(clientX, clientY);
+    return getDoc().elementFromPoint(x, y) as HTMLElement | null;
+  };
+  // iframe-aware elementsFromPoint
+  const elementsFromPointTarget = (
+    clientX: number,
+    clientY: number,
+  ): Element[] => {
+    if (!isContainerMode) return Array.from(document.elementsFromPoint(clientX, clientY));
+    const { x, y } = translateToInternal(clientX, clientY);
+    return Array.from(getDoc().elementsFromPoint(x, y));
+  };
+  // Translate an iframe-internal DOMRect to container-relative coordinates
+  // so overlays rendered with position:fixed (which is container-relative due to
+  // the transform on the container) align correctly over the iframe.
+  const translateRectToVisual = (rect: DOMRect | { left: number; top: number; width: number; height: number }): { left: number; top: number; width: number; height: number } => {
+    if (!isContainerMode || !targetIframe?.current) {
+      return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+    }
+    const iframe = targetIframe.current;
+    const iframeRect = iframe.getBoundingClientRect();
+    const scaleX = iframeRect.width / (iframe.clientWidth || 1);
+    const scaleY = iframeRect.height / (iframe.clientHeight || 1);
+    // Get iframe position relative to the container (not the viewport)
+    const cRect = containerRef?.current?.getBoundingClientRect();
+    const offsetX = cRect ? iframeRect.left - cRect.left : iframeRect.left;
+    const offsetY = cRect ? iframeRect.top - cRect.top : iframeRect.top;
+    return {
+      left: offsetX + rect.left * scaleX,
+      top: offsetY + rect.top * scaleY,
+      width: rect.width * scaleX,
+      height: rect.height * scaleY,
+    };
+  };
+  // Translate viewport mouse coordinates (clientX/Y) to container-relative coordinates
+  // needed for hover tooltips and other overlay positioning.
+  const toContainerCoords = (clientX: number, clientY: number): { x: number; y: number } => {
+    if (!isContainerMode || !containerRef?.current) {
+      return { x: clientX, y: clientY };
+    }
+    const cRect = containerRef.current.getBoundingClientRect();
+    return { x: clientX - cRect.left, y: clientY - cRect.top };
+  };
+  // Overlay/rendering dimensions (for marker/popup positioning within the container)
+  const getRenderWidth = (): number =>
+    isContainerMode
+      ? (containerRef?.current?.clientWidth ?? window.innerWidth)
+      : window.innerWidth;
+  const getRenderHeight = (): number =>
+    isContainerMode
+      ? (containerRef?.current?.clientHeight ?? window.innerHeight)
+      : window.innerHeight;
   const [isActive, setIsActive] = useState(false);
-  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [annotations, setAnnotations] = useState<Annotation[]>(controlledAnnotations ?? []);
   const [showMarkers, setShowMarkers] = useState(true);
+
+  // Sync from controlled annotations prop
+  useEffect(() => {
+    if (controlledAnnotations !== undefined) {
+      setAnnotations(controlledAnnotations.filter(isRenderableAnnotation));
+    }
+  }, [controlledAnnotations]);
   const [isToolbarHidden, setIsToolbarHidden] = useState(() => loadToolbarHidden());
   const [isToolbarHiding, setIsToolbarHiding] = useState(false);
 
@@ -541,12 +652,22 @@ export function PageFeedbackToolbarCSS({
         e.stopPropagation();
       }
     };
+    const target = isContainerMode && containerRef?.current ? containerRef.current : document.body;
     const events = ["mousedown", "click", "pointerdown"] as const;
-    events.forEach((evt) => document.body.addEventListener(evt, stop));
+    events.forEach((evt) => target.addEventListener(evt, stop));
     return () => {
-      events.forEach((evt) => document.body.removeEventListener(evt, stop));
+      events.forEach((evt) => target.removeEventListener(evt, stop));
     };
-  }, []);
+  }, [isContainerMode, containerRef]);
+
+  // In container mode, toggle the container's pointer-events and cursor so that:
+  // - When inactive: "none" → events pass through to the player controls
+  // - When active: "auto" + crosshair → container captures annotation click/hover events
+  useEffect(() => {
+    if (!isContainerMode || !containerRef?.current) return;
+    containerRef.current.style.pointerEvents = isActive ? "auto" : "none";
+    containerRef.current.style.cursor = isActive ? "crosshair" : "";
+  }, [isContainerMode, isActive, containerRef]);
 
   // Unified marker visibility state - controls both toolbar and eye toggle
   const [markersVisible, setMarkersVisible] = useState(false);
@@ -799,9 +920,11 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
   // Mount and load
   useEffect(() => {
     setMounted(true);
-    setScrollY(window.scrollY);
-    const stored = loadAnnotations<Annotation>(pathname);
-    setAnnotations(stored.filter(isRenderableAnnotation));
+    setScrollY(getScrollY());
+    if (!disableStorage) {
+      const stored = loadAnnotations<Annotation>(pathname);
+      setAnnotations(stored.filter(isRenderableAnnotation));
+    }
 
     // Trigger entrance animation only on first load (not on SPA navigation)
     if (!hasPlayedEntranceAnimation) {
@@ -811,50 +934,52 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       originalSetTimeout(() => setShowEntranceAnimation(false), 750);
     }
 
-    // Load saved theme preference, default to dark mode
-    try {
-      const savedTheme = localStorage.getItem("feedback-toolbar-theme");
-      if (savedTheme !== null) {
-        setIsDarkMode(savedTheme === "dark");
-      }
-      // If no saved preference, keep default (dark mode)
-    } catch (e) {
-      // Ignore localStorage errors
-    }
-
-    // Load saved toolbar position
-    try {
-      const savedPosition = localStorage.getItem("feedback-toolbar-position");
-      if (savedPosition) {
-        const pos = JSON.parse(savedPosition);
-        if (typeof pos.x === "number" && typeof pos.y === "number") {
-          setToolbarPosition(pos);
+    if (!disableStorage) {
+      // Load saved theme preference, default to dark mode
+      try {
+        const savedTheme = localStorage.getItem("feedback-toolbar-theme");
+        if (savedTheme !== null) {
+          setIsDarkMode(savedTheme === "dark");
         }
+        // If no saved preference, keep default (dark mode)
+      } catch (e) {
+        // Ignore localStorage errors
       }
-    } catch (e) {
-      // Ignore localStorage errors
+
+      // Load saved toolbar position
+      try {
+        const savedPosition = localStorage.getItem("feedback-toolbar-position");
+        if (savedPosition) {
+          const pos = JSON.parse(savedPosition);
+          if (typeof pos.x === "number" && typeof pos.y === "number") {
+            setToolbarPosition(pos);
+          }
+        }
+      } catch (e) {
+        // Ignore localStorage errors
+      }
     }
   }, [pathname]);
 
   // Save settings
   useEffect(() => {
-    if (mounted) {
+    if (mounted && !disableStorage) {
       localStorage.setItem(
         "feedback-toolbar-settings",
         JSON.stringify(settings),
       );
     }
-  }, [settings, mounted]);
+  }, [settings, mounted, disableStorage]);
 
   // Save theme preference
   useEffect(() => {
-    if (mounted) {
+    if (mounted && !disableStorage) {
       localStorage.setItem(
         "feedback-toolbar-theme",
         isDarkMode ? "dark" : "light",
       );
     }
-  }, [isDarkMode, mounted]);
+  }, [isDarkMode, mounted, disableStorage]);
 
   // Save toolbar position when drag ends
   const prevDraggingRef = useRef(false);
@@ -863,13 +988,13 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     prevDraggingRef.current = isDraggingToolbar;
 
     // Save position when dragging ends (transition from true to false)
-    if (wasDragging && !isDraggingToolbar && toolbarPosition && mounted) {
+    if (wasDragging && !isDraggingToolbar && toolbarPosition && mounted && !disableStorage) {
       localStorage.setItem(
         "feedback-toolbar-position",
         JSON.stringify(toolbarPosition),
       );
     }
-  }, [isDraggingToolbar, toolbarPosition, mounted]);
+  }, [isDraggingToolbar, toolbarPosition, mounted, disableStorage]);
 
   // Initialize server session (when endpoint is provided)
   useEffect(() => {
@@ -1251,7 +1376,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
       timeoutIds.push(
         originalSetTimeout(() => {
-          const element = document.querySelector(demo.selector) as HTMLElement;
+          const element = getDoc().querySelector(demo.selector) as HTMLElement;
           if (!element) return;
 
           const rect = element.getBoundingClientRect();
@@ -1259,8 +1384,8 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
           const newAnnotation: Annotation = {
             id: `demo-${Date.now()}-${index}`,
-            x: ((rect.left + rect.width / 2) / window.innerWidth) * 100,
-            y: rect.top + rect.height / 2 + window.scrollY,
+            x: ((rect.left + rect.width / 2) / getViewportWidth()) * 100,
+            y: rect.top + rect.height / 2 + getScrollY(),
             comment: demo.comment,
             element: name,
             elementPath: path,
@@ -1268,7 +1393,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
             selectedText: demo.selectedText,
             boundingBox: {
               x: rect.left,
-              y: rect.top + window.scrollY,
+              y: rect.top + getScrollY(),
               width: rect.width,
               height: rect.height,
             },
@@ -1289,7 +1414,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
   // Track scroll
   useEffect(() => {
     const handleScroll = () => {
-      setScrollY(window.scrollY);
+      setScrollY(getScrollY());
       setIsScrolling(true);
 
       if (scrollTimeoutRef.current) {
@@ -1301,9 +1426,10 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       }, 150);
     };
 
-    window.addEventListener("scroll", handleScroll, { passive: true });
+    const scrollTarget = getWin();
+    scrollTarget.addEventListener("scroll", handleScroll, { passive: true });
     return () => {
-      window.removeEventListener("scroll", handleScroll);
+      scrollTarget.removeEventListener("scroll", handleScroll);
       if (scrollTimeoutRef.current) {
         clearTimeout(scrollTimeoutRef.current);
       }
@@ -1312,6 +1438,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
   // Save annotations (preserving sync markers if connected to a session)
   useEffect(() => {
+    if (disableStorage) return;
     if (mounted && annotations.length > 0) {
       if (currentSessionId) {
         // Connected to session - save with sync marker to prevent re-upload on refresh
@@ -1323,7 +1450,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     } else if (mounted && annotations.length === 0) {
       localStorage.removeItem(getStorageKey(pathname));
     }
-  }, [annotations, pathname, mounted, currentSessionId]);
+  }, [annotations, pathname, mounted, currentSessionId, disableStorage]);
 
   // Freeze animations (delegates to freeze-animations utility)
   const freezeAnimations = useCallback(() => {
@@ -1365,14 +1492,14 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       const isFixed = isElementFixed(firstEl);
 
       setPendingAnnotation({
-        x: (rect.left / window.innerWidth) * 100,
-        y: isFixed ? rect.top : rect.top + window.scrollY,
+        x: (rect.left / getViewportWidth()) * 100,
+        y: isFixed ? rect.top : rect.top + getScrollY(),
         clientY: rect.top,
         element: firstItem.name,
         elementPath: firstItem.path,
         boundingBox: {
           x: rect.left,
-          y: isFixed ? rect.top : rect.top + window.scrollY,
+          y: isFixed ? rect.top : rect.top + getScrollY(),
           width: rect.width,
           height: rect.height,
         },
@@ -1407,7 +1534,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
       const elementBoundingBoxes = freshRects.map((rect) => ({
         x: rect.left,
-        y: rect.top + window.scrollY,
+        y: rect.top + getScrollY(),
         width: rect.width,
         height: rect.height,
       }));
@@ -1421,14 +1548,14 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       const lastIsFixed = isElementFixed(lastEl);
 
       setPendingAnnotation({
-        x: (lastCenterX / window.innerWidth) * 100,
-        y: lastIsFixed ? lastCenterY : lastCenterY + window.scrollY,
+        x: (lastCenterX / getViewportWidth()) * 100,
+        y: lastIsFixed ? lastCenterY : lastCenterY + getScrollY(),
         clientY: lastCenterY,
         element: `${pendingMultiSelectElements.length} elements: ${names}${suffix}`,
         elementPath: "multi-select",
         boundingBox: {
           x: bounds.left,
-          y: bounds.top + window.scrollY,
+          y: bounds.top + getScrollY(),
           width: bounds.right - bounds.left,
           height: bounds.bottom - bounds.top,
         },
@@ -1476,9 +1603,9 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     };
   }, []);
 
-  // Custom cursor
+  // Custom cursor (skip in container mode — overlay handles cursor)
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive || isContainerMode) return;
 
     const style = document.createElement("style");
     style.id = "feedback-cursor-styles";
@@ -1541,7 +1668,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
         return;
       }
 
-      const elementUnder = deepElementFromPoint(e.clientX, e.clientY);
+      const elementUnder = elementFromPointTarget(e.clientX, e.clientY);
       if (
         !elementUnder ||
         closestCrossingShadow(elementUnder, "[data-feedback-toolbar]")
@@ -1561,12 +1688,14 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
         rect,
         reactComponents,
       });
-      setHoverPosition({ x: e.clientX, y: e.clientY });
+      const hp = toContainerCoords(e.clientX, e.clientY);
+      setHoverPosition(hp);
     };
 
-    document.addEventListener("mousemove", handleMouseMove);
-    return () => document.removeEventListener("mousemove", handleMouseMove);
-  }, [isActive, pendingAnnotation, effectiveReactMode]);
+    const target = getEventTarget();
+    target.addEventListener("mousemove", handleMouseMove as EventListener);
+    return () => target.removeEventListener("mousemove", handleMouseMove as EventListener);
+  }, [isActive, pendingAnnotation, effectiveReactMode, isContainerMode]);
 
   // Handle click
   useEffect(() => {
@@ -1590,7 +1719,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
         e.preventDefault();
         e.stopPropagation();
 
-        const elementUnder = deepElementFromPoint(e.clientX, e.clientY);
+        const elementUnder = elementFromPointTarget(e.clientX, e.clientY);
         if (!elementUnder) return;
 
         const rect = elementUnder.getBoundingClientRect();
@@ -1657,7 +1786,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
       e.preventDefault();
 
-      const elementUnder = deepElementFromPoint(e.clientX, e.clientY);
+      const elementUnder = elementFromPointTarget(e.clientX, e.clientY);
       if (!elementUnder) return;
 
       const { name, path, reactComponents } = identifyElementWithReact(
@@ -1665,12 +1794,32 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
         effectiveReactMode,
       );
       const rect = elementUnder.getBoundingClientRect();
-      const x = (e.clientX / window.innerWidth) * 100;
 
-      const isFixed = isElementFixed(elementUnder);
-      const y = isFixed ? e.clientY : e.clientY + window.scrollY;
+      let x: number;
+      let y: number;
+      let clickClientY: number;
+      let bbx: number;
+      let bby: number;
+      const isFixed = isContainerMode ? false : isElementFixed(elementUnder);
 
-      const selection = window.getSelection();
+      if (isContainerMode && containerRef?.current) {
+        // In container mode, position markers relative to the container
+        const cRect = containerRef.current.getBoundingClientRect();
+        x = ((e.clientX - cRect.left) / cRect.width) * 100;
+        y = e.clientY - cRect.top;
+        clickClientY = e.clientY;
+        // Bounding box in iframe-internal coordinates (for annotation data)
+        bbx = rect.left;
+        bby = rect.top;
+      } else {
+        x = (e.clientX / getViewportWidth()) * 100;
+        y = isFixed ? e.clientY : e.clientY + getScrollY();
+        clickClientY = e.clientY;
+        bbx = rect.left;
+        bby = isFixed ? rect.top : rect.top + getScrollY();
+      }
+
+      const selection = getWin().getSelection();
       let selectedText: string | undefined;
       if (selection && selection.toString().trim().length > 0) {
         selectedText = selection.toString().trim().slice(0, 500);
@@ -1683,13 +1832,13 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       setPendingAnnotation({
         x,
         y,
-        clientY: e.clientY,
+        clientY: clickClientY,
         element: name,
         elementPath: path,
         selectedText,
         boundingBox: {
-          x: rect.left,
-          y: isFixed ? rect.top : rect.top + window.scrollY,
+          x: bbx,
+          y: bby,
           width: rect.width,
           height: rect.height,
         },
@@ -1709,13 +1858,15 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     };
 
     // Use capture phase to intercept before element handlers
-    document.addEventListener("click", handleClick, true);
-    return () => document.removeEventListener("click", handleClick, true);
+    const target = getEventTarget();
+    target.addEventListener("click", handleClick as EventListener, true);
+    return () => target.removeEventListener("click", handleClick as EventListener, true);
   }, [
     isActive,
     pendingAnnotation,
     editingAnnotation,
     settings.blockInteractions,
+    isContainerMode,
     effectiveReactMode,
     pendingMultiSelectElements,
   ]);
@@ -1825,9 +1976,10 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       mouseDownPosRef.current = { x: e.clientX, y: e.clientY };
     };
 
-    document.addEventListener("mousedown", handleMouseDown);
-    return () => document.removeEventListener("mousedown", handleMouseDown);
-  }, [isActive, pendingAnnotation]);
+    const target = getEventTarget();
+    target.addEventListener("mousedown", handleMouseDown as EventListener);
+    return () => target.removeEventListener("mousedown", handleMouseDown as EventListener);
+  }, [isActive, pendingAnnotation, isContainerMode]);
 
   // Multi-select drag - mousemove (fully optimized with direct DOM updates)
   useEffect(() => {
@@ -1889,14 +2041,14 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
         ];
 
         for (const [x, y] of points) {
-          const elements = document.elementsFromPoint(x, y);
+          const elements = elementsFromPointTarget(x, y);
           for (const el of elements) {
             if (el instanceof HTMLElement) candidateElements.add(el);
           }
         }
 
         // Also check nearby elements
-        const nearbyElements = document.querySelectorAll(
+        const nearbyElements = getDoc().querySelectorAll(
           "button, a, input, img, p, h1, h2, h3, h4, h5, h6, li, label, td, th, div, span, section, article, aside, nav",
         );
         for (const el of nearbyElements) {
@@ -1959,8 +2111,8 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
           const rect = el.getBoundingClientRect();
           if (
-            rect.width > window.innerWidth * 0.8 &&
-            rect.height > window.innerHeight * 0.5
+            rect.width > getViewportWidth() * 0.8 &&
+            rect.height > getViewportHeight() * 0.5
           )
             continue;
           if (rect.width < 10 || rect.height < 10) continue;
@@ -2027,9 +2179,10 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
               div.className = styles.selectedElementHighlight;
               container.appendChild(div);
             }
-            div.style.transform = `translate(${rect.left}px, ${rect.top}px)`;
-            div.style.width = `${rect.width}px`;
-            div.style.height = `${rect.height}px`;
+            const vr = translateRectToVisual(rect);
+            div.style.transform = `translate(${vr.left}px, ${vr.top}px)`;
+            div.style.width = `${vr.width}px`;
+            div.style.height = `${vr.height}px`;
           });
         }
       }
@@ -2061,7 +2214,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
         const selector =
           "button, a, input, img, p, h1, h2, h3, h4, h5, h6, li, label, td, th";
 
-        document.querySelectorAll(selector).forEach((el) => {
+        getDoc().querySelectorAll(selector).forEach((el) => {
           if (!(el instanceof HTMLElement)) return;
           if (
             closestCrossingShadow(el, "[data-feedback-toolbar]") ||
@@ -2071,8 +2224,8 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
           const rect = el.getBoundingClientRect();
           if (
-            rect.width > window.innerWidth * 0.8 &&
-            rect.height > window.innerHeight * 0.5
+            rect.width > getViewportWidth() * 0.8 &&
+            rect.height > getViewportHeight() * 0.5
           )
             return;
           if (rect.width < 10 || rect.height < 10) return;
@@ -2096,8 +2249,8 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
             ),
         );
 
-        const x = (e.clientX / window.innerWidth) * 100;
-        const y = e.clientY + window.scrollY;
+        const x = (e.clientX / getViewportWidth()) * 100;
+        const y = e.clientY + getScrollY();
 
         if (finalElements.length > 0) {
           const bounds = finalElements.reduce(
@@ -2139,7 +2292,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
             elementPath: "multi-select",
             boundingBox: {
               x: bounds.left,
-              y: bounds.top + window.scrollY,
+              y: bounds.top + getScrollY(),
               width: bounds.right - bounds.left,
               height: bounds.bottom - bounds.top,
             },
@@ -2169,7 +2322,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
               elementPath: `region at (${Math.round(left)}, ${Math.round(top)})`,
               boundingBox: {
                 x: left,
-                y: top + window.scrollY,
+                y: top + getScrollY(),
                 width,
                 height,
               },
@@ -2289,7 +2442,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
         setPendingExiting(false);
       }, 150);
 
-      window.getSelection()?.removeAllRanges();
+      getWin().getSelection()?.removeAllRanges();
 
       // Sync to server (non-blocking, but update local ID with server's ID)
       if (endpoint && currentSessionId) {
@@ -2405,7 +2558,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       const elements: HTMLElement[] = [];
       for (const bb of annotation.elementBoundingBoxes) {
         const centerX = bb.x + bb.width / 2;
-        const centerY = bb.y + bb.height / 2 - window.scrollY;
+        const centerY = bb.y + bb.height / 2 - getScrollY();
         const el = deepElementFromPoint(centerX, centerY);
         if (el) elements.push(el);
       }
@@ -2418,7 +2571,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       // Convert document coords to viewport coords (unless fixed)
       const centerY = annotation.isFixed
         ? bb.y + bb.height / 2
-        : bb.y + bb.height / 2 - window.scrollY;
+        : bb.y + bb.height / 2 - getScrollY();
       const el = deepElementFromPoint(centerX, centerY);
 
       // Validate found element's size roughly matches stored bounding box
@@ -2459,9 +2612,9 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
         const elements: HTMLElement[] = [];
         for (const bb of annotation.elementBoundingBoxes) {
           const centerX = bb.x + bb.width / 2;
-          const centerY = bb.y + bb.height / 2 - window.scrollY;
+          const centerY = bb.y + bb.height / 2 - getScrollY();
           // Use elementsFromPoint to look through the marker if it's covering
-          const allEls = document.elementsFromPoint(centerX, centerY);
+          const allEls = elementsFromPointTarget(centerX, centerY);
           const el = allEls.find(
             (e) => !e.closest('[data-annotation-marker]') && !e.closest('[data-agentation-root]'),
           ) as HTMLElement | undefined;
@@ -2475,7 +2628,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
         const centerX = bb.x + bb.width / 2;
         const centerY = annotation.isFixed
           ? bb.y + bb.height / 2
-          : bb.y + bb.height / 2 - window.scrollY;
+          : bb.y + bb.height / 2 - getScrollY();
         const el = deepElementFromPoint(centerX, centerY);
 
         // Validate found element's size roughly matches stored bounding box
@@ -2584,7 +2737,9 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     originalSetTimeout(() => {
       setAnnotations([]);
       setAnimatedMarkers(new Set()); // Reset animated markers
-      localStorage.removeItem(getStorageKey(pathname));
+      if (!disableStorage) {
+        localStorage.removeItem(getStorageKey(pathname));
+      }
       setIsClearing(false);
     }, totalAnimationTime);
 
@@ -2604,6 +2759,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       displayUrl,
       settings.outputDetail,
       effectiveReactMode,
+      isContainerMode ? getWin() : undefined,
     );
     if (!output) return;
 
@@ -2648,6 +2804,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       displayUrl,
       settings.outputDetail,
       effectiveReactMode,
+      isContainerMode ? getWin() : undefined,
     );
     if (!output) return;
 
@@ -2961,7 +3118,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     const gap = 10;
 
     // Convert percentage-based x to pixels
-    const markerX = (annotation.x / 100) * window.innerWidth;
+    const markerX = (annotation.x / 100) * getRenderWidth();
     const markerY =
       typeof annotation.y === "string"
         ? parseFloat(annotation.y)
@@ -2970,7 +3127,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     const styles: React.CSSProperties = {};
 
     // Vertical positioning: flip if near bottom
-    const spaceBelow = window.innerHeight - markerY - markerSize - gap;
+    const spaceBelow = getRenderHeight() - markerY - markerSize - gap;
     if (spaceBelow < tooltipEstimatedHeight) {
       // Show above marker
       styles.top = "auto";
@@ -2986,10 +3143,10 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       // Too close to left edge
       const offset = edgePadding - centerX;
       styles.left = `calc(50% + ${offset}px)`;
-    } else if (centerX + tooltipMaxWidth > window.innerWidth - edgePadding) {
+    } else if (centerX + tooltipMaxWidth > getRenderWidth() - edgePadding) {
       // Too close to right edge
       const overflow =
-        centerX + tooltipMaxWidth - (window.innerWidth - edgePadding);
+        centerX + tooltipMaxWidth - (getRenderWidth() - edgePadding);
       styles.left = `calc(50% - ${overflow}px)`;
     }
     // If centered position is fine, use default CSS (left: 50%)
@@ -3876,25 +4033,29 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
           {hoverInfo?.rect &&
             !pendingAnnotation &&
             !isScrolling &&
-            !isDragging && (
+            !isDragging && (() => {
+              const visualRect = translateRectToVisual(hoverInfo.rect);
+              return (
               <div
                 className={`${styles.hoverHighlight} ${styles.enter}`}
                 style={{
-                  left: hoverInfo.rect.left,
-                  top: hoverInfo.rect.top,
-                  width: hoverInfo.rect.width,
-                  height: hoverInfo.rect.height,
+                  left: visualRect.left,
+                  top: visualRect.top,
+                  width: visualRect.width,
+                  height: visualRect.height,
                   borderColor: "color-mix(in srgb, var(--agentation-color-accent) 50%, transparent)",
                   backgroundColor: "color-mix(in srgb, var(--agentation-color-accent) 4%, transparent)",
                 }}
               />
-            )}
+              );
+            })()}
 
           {/* Cmd+shift+click multi-select highlights (during selection, before releasing modifiers) */}
           {pendingMultiSelectElements
-            .filter((item) => document.contains(item.element))
+            .filter((item) => getDoc().contains(item.element))
             .map((item, index) => {
-              const rect = item.element.getBoundingClientRect();
+              const rawRect = item.element.getBoundingClientRect();
+              const rect = translateRectToVisual(rawRect);
               // Only show green if 2+ elements selected, otherwise use default blue
               const isMulti = pendingMultiSelectElements.length > 1;
               return (
@@ -3936,18 +4097,18 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
                 // Use live positions from hoveredTargetElements when available
                 if (hoveredTargetElements.length > 0) {
                   return hoveredTargetElements
-                    .filter((el) => document.contains(el))
+                    .filter((el) => getDoc().contains(el))
                     .map((el, index) => {
-                      const rect = el.getBoundingClientRect();
+                      const vr = translateRectToVisual(el.getBoundingClientRect());
                       return (
                         <div
                           key={`hover-outline-live-${index}`}
                           className={`${styles.multiSelectOutline} ${styles.enter}`}
                           style={{
-                            left: rect.left,
-                            top: rect.top,
-                            width: rect.width,
-                            height: rect.height,
+                            left: vr.left,
+                            top: vr.top,
+                            width: vr.width,
+                            height: vr.height,
                           }}
                         />
                       );
@@ -3955,37 +4116,41 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
                 }
                 // Fallback to stored bounding boxes
                 return hoveredAnnotation.elementBoundingBoxes.map(
-                  (bb, index) => (
+                  (bb, index) => {
+                    const vr = translateRectToVisual({ left: bb.x, top: bb.y - scrollY, width: bb.width, height: bb.height });
+                    return (
                     <div
                       key={`hover-outline-${index}`}
                       className={`${styles.multiSelectOutline} ${styles.enter}`}
                       style={{
-                        left: bb.x,
-                        top: bb.y - scrollY,
-                        width: bb.width,
-                        height: bb.height,
+                        left: vr.left,
+                        top: vr.top,
+                        width: vr.width,
+                        height: vr.height,
                       }}
                     />
-                  ),
+                    );
+                  },
                 );
               }
 
               // Single element: use live position from hoveredTargetElement when available
-              const rect =
-                hoveredTargetElement && document.contains(hoveredTargetElement)
+              const rawRect =
+                hoveredTargetElement && getDoc().contains(hoveredTargetElement)
                   ? hoveredTargetElement.getBoundingClientRect()
                   : null;
 
-              const bb = rect
-                ? { x: rect.left, y: rect.top, width: rect.width, height: rect.height }
-                : {
-                    x: hoveredAnnotation.boundingBox.x,
-                    y: hoveredAnnotation.isFixed
+              const translated = rawRect
+                ? translateRectToVisual(rawRect)
+                : translateRectToVisual({
+                    left: hoveredAnnotation.boundingBox.x,
+                    top: hoveredAnnotation.isFixed
                       ? hoveredAnnotation.boundingBox.y
                       : hoveredAnnotation.boundingBox.y - scrollY,
                     width: hoveredAnnotation.boundingBox.width,
                     height: hoveredAnnotation.boundingBox.height,
-                  };
+                  });
+              const bb = { x: translated.left, y: translated.top, width: translated.width, height: translated.height };
 
               const isMulti = hoveredAnnotation.isMultiSelect;
               return (
@@ -4014,7 +4179,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
               style={{
                 left: Math.max(
                   8,
-                  Math.min(hoverPosition.x, window.innerWidth - 100),
+                  Math.min(hoverPosition.x, getRenderWidth() - 100),
                 ),
                 top: Math.max(
                   hoverPosition.y - (hoverInfo.reactComponents ? 48 : 32),
@@ -4040,29 +4205,30 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
               {pendingAnnotation.multiSelectElements?.length
                 ? // Cmd+shift+click multi-select: show individual boxes with live positions
                   pendingAnnotation.multiSelectElements
-                    .filter((el) => document.contains(el))
+                    .filter((el) => getDoc().contains(el))
                     .map((el, index) => {
-                      const rect = el.getBoundingClientRect();
+                      const vr = translateRectToVisual(el.getBoundingClientRect());
                       return (
                         <div
                           key={`pending-multi-${index}`}
                           className={`${styles.multiSelectOutline} ${pendingExiting ? styles.exit : styles.enter}`}
                           style={{
-                            left: rect.left,
-                            top: rect.top,
-                            width: rect.width,
-                            height: rect.height,
+                            left: vr.left,
+                            top: vr.top,
+                            width: vr.width,
+                            height: vr.height,
                           }}
                         />
                       );
                     })
                 : // Single element or drag multi-select: show single box
                   pendingAnnotation.targetElement &&
-                  document.contains(pendingAnnotation.targetElement)
+                  getDoc().contains(pendingAnnotation.targetElement)
                     ? // Single-click: use live getBoundingClientRect for consistent positioning
                       (() => {
-                        const rect =
+                        const rawRect =
                           pendingAnnotation.targetElement!.getBoundingClientRect();
+                        const rect = translateRectToVisual(rawRect);
                         return (
                           <div
                             className={`${styles.singleSelectOutline} ${pendingExiting ? styles.exit : styles.enter}`}
@@ -4078,14 +4244,16 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
                         );
                       })()
                     : // Drag selection or fallback: use stored boundingBox
-                      pendingAnnotation.boundingBox && (
+                      pendingAnnotation.boundingBox && (() => {
+                        const bb = translateRectToVisual({ left: pendingAnnotation.boundingBox.x, top: pendingAnnotation.boundingBox.y - scrollY, width: pendingAnnotation.boundingBox.width, height: pendingAnnotation.boundingBox.height });
+                        return (
                         <div
                           className={`${pendingAnnotation.isMultiSelect ? styles.multiSelectOutline : styles.singleSelectOutline} ${pendingExiting ? styles.exit : styles.enter}`}
                           style={{
-                            left: pendingAnnotation.boundingBox.x,
-                            top: pendingAnnotation.boundingBox.y - scrollY,
-                            width: pendingAnnotation.boundingBox.width,
-                            height: pendingAnnotation.boundingBox.height,
+                            left: bb.left,
+                            top: bb.top,
+                            width: bb.width,
+                            height: bb.height,
                             ...(pendingAnnotation.isMultiSelect
                               ? {}
                               : {
@@ -4094,7 +4262,8 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
                                 }),
                           }}
                         />
-                      )}
+                        );
+                      })()}
 
               {(() => {
                 // Use stored coordinates - they match what will be saved
@@ -4145,13 +4314,13 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
                         left: Math.max(
                           160,
                           Math.min(
-                            window.innerWidth - 160,
-                            (markerX / 100) * window.innerWidth,
+                            getRenderWidth() - 160,
+                            (markerX / 100) * getRenderWidth(),
                           ),
                         ),
                         // Position popup above or below marker to keep marker visible
-                        ...(markerY > window.innerHeight - 290
-                          ? { bottom: window.innerHeight - markerY + 20 }
+                        ...(markerY > getRenderHeight() - 290
+                          ? { bottom: getRenderHeight() - markerY + 20 }
                           : { top: markerY + 20 }),
                       }}
                     />
@@ -4171,18 +4340,18 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
                     // Use live positions from editingTargetElements when available
                     if (editingTargetElements.length > 0) {
                       return editingTargetElements
-                        .filter((el) => document.contains(el))
+                        .filter((el) => getDoc().contains(el))
                         .map((el, index) => {
-                          const rect = el.getBoundingClientRect();
+                          const vr = translateRectToVisual(el.getBoundingClientRect());
                           return (
                             <div
                               key={`edit-multi-live-${index}`}
                               className={`${styles.multiSelectOutline} ${styles.enter}`}
                               style={{
-                                left: rect.left,
-                                top: rect.top,
-                                width: rect.width,
-                                height: rect.height,
+                                left: vr.left,
+                                top: vr.top,
+                                width: vr.width,
+                                height: vr.height,
                               }}
                             />
                           );
@@ -4190,41 +4359,45 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
                     }
                     // Fallback to stored bounding boxes
                     return editingAnnotation.elementBoundingBoxes!.map(
-                      (bb, index) => (
+                      (bb, index) => {
+                        const vr = translateRectToVisual({ left: bb.x, top: bb.y - scrollY, width: bb.width, height: bb.height });
+                        return (
                         <div
                           key={`edit-multi-${index}`}
                           className={`${styles.multiSelectOutline} ${styles.enter}`}
                           style={{
-                            left: bb.x,
-                            top: bb.y - scrollY,
-                            width: bb.width,
-                            height: bb.height,
+                            left: vr.left,
+                            top: vr.top,
+                            width: vr.width,
+                            height: vr.height,
                           }}
                         />
-                      ),
+                        );
+                      },
                     );
                   })()
                 : // Single element or drag multi-select: show single box
                   (() => {
                     // Use live position from editingTargetElement when available
-                    const rect =
+                    const rawRect =
                       editingTargetElement &&
-                      document.contains(editingTargetElement)
+                      getDoc().contains(editingTargetElement)
                         ? editingTargetElement.getBoundingClientRect()
                         : null;
 
-                    const bb = rect
-                      ? { x: rect.left, y: rect.top, width: rect.width, height: rect.height }
+                    const translated = rawRect
+                      ? translateRectToVisual(rawRect)
                       : editingAnnotation.boundingBox
-                        ? {
-                            x: editingAnnotation.boundingBox.x,
-                            y: editingAnnotation.isFixed
+                        ? translateRectToVisual({
+                            left: editingAnnotation.boundingBox.x,
+                            top: editingAnnotation.isFixed
                               ? editingAnnotation.boundingBox.y
                               : editingAnnotation.boundingBox.y - scrollY,
                             width: editingAnnotation.boundingBox.width,
                             height: editingAnnotation.boundingBox.height,
-                          }
+                          })
                         : null;
+                    const bb = translated ? { x: translated.left, y: translated.top, width: translated.width, height: translated.height } : null;
 
                     if (!bb) return null;
 
@@ -4277,13 +4450,13 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
                     left: Math.max(
                       160,
                       Math.min(
-                        window.innerWidth - 160,
-                        (editingAnnotation.x / 100) * window.innerWidth,
+                        getRenderWidth() - 160,
+                        (editingAnnotation.x / 100) * getRenderWidth(),
                       ),
                     ),
                     // Position popup above or below marker to keep marker visible
-                    ...(markerY > window.innerHeight - 290
-                      ? { bottom: window.innerHeight - markerY + 20 }
+                    ...(markerY > getRenderHeight() - 290
+                      ? { bottom: getRenderHeight() - markerY + 20 }
                       : { top: markerY + 20 }),
                   };
                 })()}
@@ -4304,7 +4477,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
         </div>
       )}
     </div>,
-    document.body,
+    isContainerMode ? (containerRef?.current ?? document.body) : document.body,
   );
 }
 
