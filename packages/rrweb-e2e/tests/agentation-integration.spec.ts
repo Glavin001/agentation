@@ -195,4 +195,43 @@ test.describe("Agentation integration in rrweb replay", () => {
     const toolbar = page.locator(TOOLBAR_LOCATOR).first();
     await expect(toolbar).toBeVisible();
   });
+
+  test("annotations persist across pause/resume cycles via value prop", async ({ page }) => {
+    await recordAndReplay(page);
+    await waitForAgentation(page);
+    await activateAgentation(page);
+
+    // Create an annotation
+    await clickInReplay(page, "#card-analytics");
+    await fillAndSubmitPopup(page, "Persist this annotation");
+    await expect(page.locator("#annotation-count")).toContainText("(1)", { timeout: 5_000 });
+
+    // Resume playback programmatically via the exposed player instance.
+    // This unmounts Agentation (isPaused becomes false).
+    await page.evaluate(() => {
+      const player = (window as any).__rrwebPlayer;
+      if (player) {
+        const replayer = player.getReplayer();
+        // Seek to 0 and play so there's meaningful replay time
+        replayer.play(0);
+      }
+    });
+
+    // Wait for Agentation to unmount (playback resumed)
+    await expect(page.locator(TOOLBAR_LOCATOR).first()).not.toBeVisible({ timeout: 10_000 });
+
+    // Wait for replay to finish and Agentation to reappear
+    await waitForAgentation(page);
+
+    // The annotation panel should still show the annotation (parent state persisted)
+    await expect(page.locator("#annotation-count")).toContainText("(1)");
+
+    // Activate toolbar and verify functional after remount
+    await activateAgentation(page);
+
+    // Add another annotation to verify the component works after remount with restored state
+    await clickInReplay(page, "#card-reports");
+    await fillAndSubmitPopup(page, "Second after resume");
+    await expect(page.locator("#annotation-count")).toContainText("(2)", { timeout: 5_000 });
+  });
 });

@@ -84,6 +84,9 @@ function ReplayWithAnnotator({ events, onAnnotation }: ReplayWithAnnotatorProps)
     });
     playerInstanceRef.current = player;
 
+    // Expose player for e2e test access
+    (window as any).__rrwebPlayer = player;
+
     // Listen for pause/resume via the replayer
     const replayer = player.getReplayer();
     replayer.on("pause", () => setIsPaused(true));
