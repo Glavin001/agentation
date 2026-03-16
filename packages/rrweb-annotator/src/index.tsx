@@ -89,6 +89,7 @@ export function RRWebAnnotator({
         <Agentation
           targetIframe={iframeRef as React.RefObject<HTMLIFrameElement>}
           containerRef={containerRef as React.RefObject<HTMLElement>}
+          disableStorage
           {...agentationProps}
         />
       )}

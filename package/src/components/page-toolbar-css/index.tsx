@@ -500,6 +500,8 @@ export type PageFeedbackToolbarCSSProps = {
   targetIframe?: React.RefObject<HTMLIFrameElement>;
   /** Container element for overlay rendering. Required when targetIframe is set. */
   containerRef?: React.RefObject<HTMLElement>;
+  /** When true, disables localStorage persistence for annotations. Useful in container mode where the parent manages annotation state via callbacks. */
+  disableStorage?: boolean;
 };
 
 /** Alias for PageFeedbackToolbarCSSProps */
@@ -527,6 +529,7 @@ export function PageFeedbackToolbarCSS({
   className: userClassName,
   targetIframe,
   containerRef,
+  disableStorage,
 }: PageFeedbackToolbarCSSProps = {}) {
   // === Container mode: target an iframe instead of document ===
   const isContainerMode = !!targetIframe;
@@ -908,8 +911,10 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
   useEffect(() => {
     setMounted(true);
     setScrollY(getScrollY());
-    const stored = loadAnnotations<Annotation>(pathname);
-    setAnnotations(stored.filter(isRenderableAnnotation));
+    if (!disableStorage) {
+      const stored = loadAnnotations<Annotation>(pathname);
+      setAnnotations(stored.filter(isRenderableAnnotation));
+    }
 
     // Trigger entrance animation only on first load (not on SPA navigation)
     if (!hasPlayedEntranceAnimation) {
@@ -919,50 +924,52 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       originalSetTimeout(() => setShowEntranceAnimation(false), 750);
     }
 
-    // Load saved theme preference, default to dark mode
-    try {
-      const savedTheme = localStorage.getItem("feedback-toolbar-theme");
-      if (savedTheme !== null) {
-        setIsDarkMode(savedTheme === "dark");
-      }
-      // If no saved preference, keep default (dark mode)
-    } catch (e) {
-      // Ignore localStorage errors
-    }
-
-    // Load saved toolbar position
-    try {
-      const savedPosition = localStorage.getItem("feedback-toolbar-position");
-      if (savedPosition) {
-        const pos = JSON.parse(savedPosition);
-        if (typeof pos.x === "number" && typeof pos.y === "number") {
-          setToolbarPosition(pos);
+    if (!disableStorage) {
+      // Load saved theme preference, default to dark mode
+      try {
+        const savedTheme = localStorage.getItem("feedback-toolbar-theme");
+        if (savedTheme !== null) {
+          setIsDarkMode(savedTheme === "dark");
         }
+        // If no saved preference, keep default (dark mode)
+      } catch (e) {
+        // Ignore localStorage errors
       }
-    } catch (e) {
-      // Ignore localStorage errors
+
+      // Load saved toolbar position
+      try {
+        const savedPosition = localStorage.getItem("feedback-toolbar-position");
+        if (savedPosition) {
+          const pos = JSON.parse(savedPosition);
+          if (typeof pos.x === "number" && typeof pos.y === "number") {
+            setToolbarPosition(pos);
+          }
+        }
+      } catch (e) {
+        // Ignore localStorage errors
+      }
     }
   }, [pathname]);
 
   // Save settings
   useEffect(() => {
-    if (mounted) {
+    if (mounted && !disableStorage) {
       localStorage.setItem(
         "feedback-toolbar-settings",
         JSON.stringify(settings),
       );
     }
-  }, [settings, mounted]);
+  }, [settings, mounted, disableStorage]);
 
   // Save theme preference
   useEffect(() => {
-    if (mounted) {
+    if (mounted && !disableStorage) {
       localStorage.setItem(
         "feedback-toolbar-theme",
         isDarkMode ? "dark" : "light",
       );
     }
-  }, [isDarkMode, mounted]);
+  }, [isDarkMode, mounted, disableStorage]);
 
   // Save toolbar position when drag ends
   const prevDraggingRef = useRef(false);
@@ -971,13 +978,13 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     prevDraggingRef.current = isDraggingToolbar;
 
     // Save position when dragging ends (transition from true to false)
-    if (wasDragging && !isDraggingToolbar && toolbarPosition && mounted) {
+    if (wasDragging && !isDraggingToolbar && toolbarPosition && mounted && !disableStorage) {
       localStorage.setItem(
         "feedback-toolbar-position",
         JSON.stringify(toolbarPosition),
       );
     }
-  }, [isDraggingToolbar, toolbarPosition, mounted]);
+  }, [isDraggingToolbar, toolbarPosition, mounted, disableStorage]);
 
   // Initialize server session (when endpoint is provided)
   useEffect(() => {
@@ -1421,6 +1428,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
   // Save annotations (preserving sync markers if connected to a session)
   useEffect(() => {
+    if (disableStorage) return;
     if (mounted && annotations.length > 0) {
       if (currentSessionId) {
         // Connected to session - save with sync marker to prevent re-upload on refresh
@@ -1432,7 +1440,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     } else if (mounted && annotations.length === 0) {
       localStorage.removeItem(getStorageKey(pathname));
     }
-  }, [annotations, pathname, mounted, currentSessionId]);
+  }, [annotations, pathname, mounted, currentSessionId, disableStorage]);
 
   // Freeze animations (delegates to freeze-animations utility)
   const freezeAnimations = useCallback(() => {
@@ -2719,7 +2727,9 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     originalSetTimeout(() => {
       setAnnotations([]);
       setAnimatedMarkers(new Set()); // Reset animated markers
-      localStorage.removeItem(getStorageKey(pathname));
+      if (!disableStorage) {
+        localStorage.removeItem(getStorageKey(pathname));
+      }
       setIsClearing(false);
     }, totalAnimationTime);
 
