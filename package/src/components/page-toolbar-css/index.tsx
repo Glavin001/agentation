@@ -579,8 +579,9 @@ export function PageFeedbackToolbarCSS({
     const { x, y } = translateToInternal(clientX, clientY);
     return Array.from(getDoc().elementsFromPoint(x, y));
   };
-  // Translate an iframe-internal DOMRect to main-page viewport coordinates
-  // so overlays rendered with position:fixed align correctly over the iframe.
+  // Translate an iframe-internal DOMRect to container-relative coordinates
+  // so overlays rendered with position:fixed (which is container-relative due to
+  // the transform on the container) align correctly over the iframe.
   const translateRectToVisual = (rect: DOMRect | { left: number; top: number; width: number; height: number }): { left: number; top: number; width: number; height: number } => {
     if (!isContainerMode || !targetIframe?.current) {
       return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
@@ -589,12 +590,25 @@ export function PageFeedbackToolbarCSS({
     const iframeRect = iframe.getBoundingClientRect();
     const scaleX = iframeRect.width / (iframe.clientWidth || 1);
     const scaleY = iframeRect.height / (iframe.clientHeight || 1);
+    // Get iframe position relative to the container (not the viewport)
+    const cRect = containerRef?.current?.getBoundingClientRect();
+    const offsetX = cRect ? iframeRect.left - cRect.left : iframeRect.left;
+    const offsetY = cRect ? iframeRect.top - cRect.top : iframeRect.top;
     return {
-      left: iframeRect.left + rect.left * scaleX,
-      top: iframeRect.top + rect.top * scaleY,
+      left: offsetX + rect.left * scaleX,
+      top: offsetY + rect.top * scaleY,
       width: rect.width * scaleX,
       height: rect.height * scaleY,
     };
+  };
+  // Translate viewport mouse coordinates (clientX/Y) to container-relative coordinates
+  // needed for hover tooltips and other overlay positioning.
+  const toContainerCoords = (clientX: number, clientY: number): { x: number; y: number } => {
+    if (!isContainerMode || !containerRef?.current) {
+      return { x: clientX, y: clientY };
+    }
+    const cRect = containerRef.current.getBoundingClientRect();
+    return { x: clientX - cRect.left, y: clientY - cRect.top };
   };
   // Overlay/rendering dimensions (for marker/popup positioning within the container)
   const getRenderWidth = (): number =>
@@ -1656,7 +1670,8 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
         rect,
         reactComponents,
       });
-      setHoverPosition({ x: e.clientX, y: e.clientY });
+      const hp = toContainerCoords(e.clientX, e.clientY);
+      setHoverPosition(hp);
     };
 
     const target = getEventTarget();
@@ -4064,16 +4079,16 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
                   return hoveredTargetElements
                     .filter((el) => getDoc().contains(el))
                     .map((el, index) => {
-                      const rect = el.getBoundingClientRect();
+                      const vr = translateRectToVisual(el.getBoundingClientRect());
                       return (
                         <div
                           key={`hover-outline-live-${index}`}
                           className={`${styles.multiSelectOutline} ${styles.enter}`}
                           style={{
-                            left: rect.left,
-                            top: rect.top,
-                            width: rect.width,
-                            height: rect.height,
+                            left: vr.left,
+                            top: vr.top,
+                            width: vr.width,
+                            height: vr.height,
                           }}
                         />
                       );
@@ -4081,37 +4096,41 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
                 }
                 // Fallback to stored bounding boxes
                 return hoveredAnnotation.elementBoundingBoxes.map(
-                  (bb, index) => (
+                  (bb, index) => {
+                    const vr = translateRectToVisual({ left: bb.x, top: bb.y - scrollY, width: bb.width, height: bb.height });
+                    return (
                     <div
                       key={`hover-outline-${index}`}
                       className={`${styles.multiSelectOutline} ${styles.enter}`}
                       style={{
-                        left: bb.x,
-                        top: bb.y - scrollY,
-                        width: bb.width,
-                        height: bb.height,
+                        left: vr.left,
+                        top: vr.top,
+                        width: vr.width,
+                        height: vr.height,
                       }}
                     />
-                  ),
+                    );
+                  },
                 );
               }
 
               // Single element: use live position from hoveredTargetElement when available
-              const rect =
+              const rawRect =
                 hoveredTargetElement && getDoc().contains(hoveredTargetElement)
                   ? hoveredTargetElement.getBoundingClientRect()
                   : null;
 
-              const bb = rect
-                ? { x: rect.left, y: rect.top, width: rect.width, height: rect.height }
-                : {
-                    x: hoveredAnnotation.boundingBox.x,
-                    y: hoveredAnnotation.isFixed
+              const translated = rawRect
+                ? translateRectToVisual(rawRect)
+                : translateRectToVisual({
+                    left: hoveredAnnotation.boundingBox.x,
+                    top: hoveredAnnotation.isFixed
                       ? hoveredAnnotation.boundingBox.y
                       : hoveredAnnotation.boundingBox.y - scrollY,
                     width: hoveredAnnotation.boundingBox.width,
                     height: hoveredAnnotation.boundingBox.height,
-                  };
+                  });
+              const bb = { x: translated.left, y: translated.top, width: translated.width, height: translated.height };
 
               const isMulti = hoveredAnnotation.isMultiSelect;
               return (
@@ -4168,16 +4187,16 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
                   pendingAnnotation.multiSelectElements
                     .filter((el) => getDoc().contains(el))
                     .map((el, index) => {
-                      const rect = el.getBoundingClientRect();
+                      const vr = translateRectToVisual(el.getBoundingClientRect());
                       return (
                         <div
                           key={`pending-multi-${index}`}
                           className={`${styles.multiSelectOutline} ${pendingExiting ? styles.exit : styles.enter}`}
                           style={{
-                            left: rect.left,
-                            top: rect.top,
-                            width: rect.width,
-                            height: rect.height,
+                            left: vr.left,
+                            top: vr.top,
+                            width: vr.width,
+                            height: vr.height,
                           }}
                         />
                       );
@@ -4303,16 +4322,16 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
                       return editingTargetElements
                         .filter((el) => getDoc().contains(el))
                         .map((el, index) => {
-                          const rect = el.getBoundingClientRect();
+                          const vr = translateRectToVisual(el.getBoundingClientRect());
                           return (
                             <div
                               key={`edit-multi-live-${index}`}
                               className={`${styles.multiSelectOutline} ${styles.enter}`}
                               style={{
-                                left: rect.left,
-                                top: rect.top,
-                                width: rect.width,
-                                height: rect.height,
+                                left: vr.left,
+                                top: vr.top,
+                                width: vr.width,
+                                height: vr.height,
                               }}
                             />
                           );
@@ -4320,41 +4339,45 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
                     }
                     // Fallback to stored bounding boxes
                     return editingAnnotation.elementBoundingBoxes!.map(
-                      (bb, index) => (
+                      (bb, index) => {
+                        const vr = translateRectToVisual({ left: bb.x, top: bb.y - scrollY, width: bb.width, height: bb.height });
+                        return (
                         <div
                           key={`edit-multi-${index}`}
                           className={`${styles.multiSelectOutline} ${styles.enter}`}
                           style={{
-                            left: bb.x,
-                            top: bb.y - scrollY,
-                            width: bb.width,
-                            height: bb.height,
+                            left: vr.left,
+                            top: vr.top,
+                            width: vr.width,
+                            height: vr.height,
                           }}
                         />
-                      ),
+                        );
+                      },
                     );
                   })()
                 : // Single element or drag multi-select: show single box
                   (() => {
                     // Use live position from editingTargetElement when available
-                    const rect =
+                    const rawRect =
                       editingTargetElement &&
                       getDoc().contains(editingTargetElement)
                         ? editingTargetElement.getBoundingClientRect()
                         : null;
 
-                    const bb = rect
-                      ? { x: rect.left, y: rect.top, width: rect.width, height: rect.height }
+                    const translated = rawRect
+                      ? translateRectToVisual(rawRect)
                       : editingAnnotation.boundingBox
-                        ? {
-                            x: editingAnnotation.boundingBox.x,
-                            y: editingAnnotation.isFixed
+                        ? translateRectToVisual({
+                            left: editingAnnotation.boundingBox.x,
+                            top: editingAnnotation.isFixed
                               ? editingAnnotation.boundingBox.y
                               : editingAnnotation.boundingBox.y - scrollY,
                             width: editingAnnotation.boundingBox.width,
                             height: editingAnnotation.boundingBox.height,
-                          }
+                          })
                         : null;
+                    const bb = translated ? { x: translated.left, y: translated.top, width: translated.width, height: translated.height } : null;
 
                     if (!bb) return null;
 
