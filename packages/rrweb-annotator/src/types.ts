@@ -1,3 +1,3 @@
-export type { Annotation, AgentationProps } from "@glavin001/agentation";
-export type { SourceMapStore, SourceNodeInfo } from "@glavin001/rrweb-source-replay";
+export type { Annotation, AgentationProps } from "agentation";
+export type { SourceMapStore, SourceNodeInfo } from "@agentation/rrweb-source-replay";
 export type { RRWebAnnotatorProps } from "./index";

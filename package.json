@@ -7,7 +7,7 @@
     "build": "pnpm --filter @glavin001/agentation build",
     "build:rrweb": "pnpm --filter @glavin001/agentation build && pnpm --filter @glavin001/rrweb-source-record build && pnpm --filter @glavin001/rrweb-source-replay build && pnpm --filter @glavin001/rrweb-annotator build",
     "example": "pnpm --filter feedback-tool-example dev",
-    "demo": "pnpm build:rrweb && pnpm --filter @glavin001/rrweb-e2e demo",
+    "demo": "pnpm build:rrweb && pnpm --filter @agentation/rrweb-e2e demo",
     "pack": "cd package && pnpm pack",
     "mcp": "pnpm --filter agentation-mcp start",
     "publish:agentation": "pnpm --filter @glavin001/agentation publish --access public",

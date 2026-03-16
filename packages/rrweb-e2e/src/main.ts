@@ -13,8 +13,8 @@
 import { record } from "rrweb";
 import rrwebPlayer from "rrweb-player";
 import "rrweb-player/dist/style.css";
-import { createSourceRecordPlugin } from "@glavin001/rrweb-source-record";
-import { createSourceReplayPlugin } from "@glavin001/rrweb-source-replay";
+import { createSourceRecordPlugin } from "@agentation/rrweb-source-record";
+import { createSourceReplayPlugin } from "@agentation/rrweb-source-replay";
 
 // ---- Types ----
 declare global {

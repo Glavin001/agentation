@@ -6,7 +6,7 @@
 // for AI coding agents.
 //
 // Usage:
-//   import { Agentation } from '@glavin001/agentation';
+//   import { Agentation } from 'agentation';
 //   <Agentation />
 //
 // =============================================================================

@@ -29,7 +29,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@glavin001/rrweb-source-record": "workspace:*"
+    "@agentation/rrweb-source-record": "workspace:@glavin001/rrweb-source-record@*"
   },
   "peerDependencies": {
     "rrweb": ">=2.0.0-alpha.0"

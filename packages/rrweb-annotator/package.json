@@ -29,8 +29,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@glavin001/rrweb-source-replay": "workspace:*",
-    "@glavin001/agentation": "workspace:*"
+    "@agentation/rrweb-source-replay": "workspace:@glavin001/rrweb-source-replay@*",
+    "agentation": "workspace:@glavin001/agentation@*"
   },
   "peerDependencies": {
     "react": ">=18.0.0",

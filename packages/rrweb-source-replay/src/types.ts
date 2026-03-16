@@ -4,5 +4,5 @@ export type {
   SourceMapPayload,
   SourceMapFullPayload,
   SourceMapIncrementalPayload,
-} from "@glavin001/rrweb-source-record";
-export { PLUGIN_NAME } from "@glavin001/rrweb-source-record";
+} from "@agentation/rrweb-source-record";
+export { PLUGIN_NAME } from "@agentation/rrweb-source-record";

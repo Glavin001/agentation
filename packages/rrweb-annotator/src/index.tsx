@@ -1,13 +1,13 @@
 // =============================================================================
-// @glavin001/rrweb-annotator
+// @agentation/rrweb-annotator
 // =============================================================================
 //
 // Thin wrapper that renders the real <Agentation /> component on top of an
 // rrweb replay player, targeting the replay iframe for annotations.
 //
 // Usage:
-//   import { RRWebAnnotator } from '@glavin001/rrweb-annotator';
-//   import { createSourceReplayPlugin } from '@glavin001/rrweb-source-replay';
+//   import { RRWebAnnotator } from '@agentation/rrweb-annotator';
+//   import { createSourceReplayPlugin } from '@agentation/rrweb-source-replay';
 //
 //   const { plugin, store } = createSourceReplayPlugin();
 //   // ... set up rrweb player with plugin ...
@@ -24,13 +24,13 @@
 // =============================================================================
 
 import React, { useEffect, useRef } from "react";
-import { Agentation } from "@glavin001/agentation";
-import type { AgentationProps } from "@glavin001/agentation";
-import type { SourceMapStore } from "@glavin001/rrweb-source-replay";
+import { Agentation } from "agentation";
+import type { AgentationProps } from "agentation";
+import type { SourceMapStore } from "@agentation/rrweb-source-replay";
 import { useIframeFromPlayer } from "./use-iframe";
 
-export type { Annotation, AgentationProps } from "@glavin001/agentation";
-export type { SourceMapStore, SourceNodeInfo } from "@glavin001/rrweb-source-replay";
+export type { Annotation, AgentationProps } from "agentation";
+export type { SourceMapStore, SourceNodeInfo } from "@agentation/rrweb-source-replay";
 export { useIframeFromPlayer } from "./use-iframe";
 
 /**

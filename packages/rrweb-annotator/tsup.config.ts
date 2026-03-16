@@ -13,8 +13,8 @@ export default defineConfig({
     "rrweb",
     "rrweb-player",
     "rrweb-snapshot",
-    "@glavin001/rrweb-source-replay",
-    "@glavin001/rrweb-source-record",
-    "@glavin001/agentation",
+    "@agentation/rrweb-source-replay",
+    "@agentation/rrweb-source-record",
+    "agentation",
   ],
 });

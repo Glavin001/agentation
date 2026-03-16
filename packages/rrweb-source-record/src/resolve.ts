@@ -9,8 +9,8 @@ import {
   getAccessibilityInfo,
   getReactComponentName,
   getSourceLocation,
-} from "@glavin001/agentation";
-import type { ReactDetectionConfig } from "@glavin001/agentation";
+} from "agentation";
+import type { ReactDetectionConfig } from "agentation";
 import type { SourceNodeInfo } from "./types";
 
 /** Tags to skip when resolving source metadata */

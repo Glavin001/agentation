@@ -1,14 +1,14 @@
 // =============================================================================
-// @glavin001/rrweb-source-replay
+// @agentation/rrweb-source-replay
 // =============================================================================
 //
 // An rrweb ReplayPlugin that processes source map events emitted by
-// @glavin001/rrweb-source-record and maintains a queryable store of element
+// @agentation/rrweb-source-record and maintains a queryable store of element
 // source metadata during playback.
 //
 // Usage:
 //   import rrwebPlayer from 'rrweb-player';
-//   import { createSourceReplayPlugin } from '@glavin001/rrweb-source-replay';
+//   import { createSourceReplayPlugin } from '@agentation/rrweb-source-replay';
 //
 //   const { plugin, store } = createSourceReplayPlugin();
 //   const player = new rrwebPlayer({
@@ -47,7 +47,7 @@ const EVENT_TYPE_PLUGIN = 6;
 /**
  * Creates an rrweb ReplayPlugin and its associated SourceMapStore.
  *
- * The plugin processes source map events from @glavin001/rrweb-source-record
+ * The plugin processes source map events from @agentation/rrweb-source-record
  * and keeps the store up-to-date as playback progresses.
  *
  * @returns An object containing the replay plugin and the source map store

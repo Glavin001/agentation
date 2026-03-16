@@ -29,7 +29,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@glavin001/agentation": "workspace:*"
+    "agentation": "workspace:@glavin001/agentation@*"
   },
   "peerDependencies": {
     "rrweb": ">=2.0.0-alpha.0"

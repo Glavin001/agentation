@@ -37,7 +37,7 @@ export default function WebhooksPage() {
           <CodeBlock
             language="tsx"
             copyable
-            code={`import { Agentation } from "@glavin001/agentation";
+            code={`import { Agentation } from "agentation";
 
 function App() {
   return (

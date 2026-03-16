@@ -4,7 +4,7 @@ import { createSourceRecordPlugin, PLUGIN_NAME } from "./index";
 import type { SourceMapPayload, SourceMapFullPayload } from "./types";
 
 // Mock agentation since we can't load the full package in test
-vi.mock("@glavin001/agentation", () => ({
+vi.mock("agentation", () => ({
   identifyElement: (el: HTMLElement) => el.tagName.toLowerCase(),
   getElementPath: (el: HTMLElement) => el.tagName.toLowerCase(),
   getElementClasses: (el: HTMLElement) => el.className || "",
